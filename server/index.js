@@ -11,11 +11,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+const META_TOKEN = process.env.META_ACCESS_TOKEN;
 const PANEL_SECRET = process.env.PANEL_SECRET || "concepto2024";
 const CACHE_TTL = parseInt(process.env.CACHE_TTL || "900"); // segundos
 
 if (!ANTHROPIC_KEY) {
   console.error("❌ Falta ANTHROPIC_API_KEY en las variables de entorno");
+  process.exit(1);
+}
+if (!META_TOKEN) {
+  console.error("❌ Falta META_ACCESS_TOKEN en las variables de entorno");
   process.exit(1);
 }
 
@@ -110,6 +115,7 @@ async function callAnthropic(prompt, maxTokens = 4000) {
               type: "url",
               url: "https://mcp.facebook.com/ads",
               name: "Meta ADS",
+              authorization_token: META_TOKEN,
             },
           ],
         }),

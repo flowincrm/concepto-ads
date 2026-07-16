@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meta Ads · Command Center — Concepto</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.383.0/umd/lucide.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0E0C07;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      color: #F6F1E7;
+      min-height: 100vh;
+    }
+    #root { max-width: 960px; margin: 0 auto; padding: 20px 16px 60px; }
+    .spin { animation: sp 0.9s linear infinite; display: inline-block; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+    input::placeholder { color: #7C7360; }
+    input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
+    input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #1F1810; }
+    ::-webkit-scrollbar-thumb { background: #3A2F1E; border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* ================================================================== */
+/* Configuración — se actualiza automáticamente al hacer login         */
+/* ================================================================== */
+const CONFIG = {
+  // Esta URL se reemplaza automáticamente al conectar con el servidor
+  serverUrl: localStorage.getItem("cc_server") || "",
+  secret: localStorage.getItem("cc_secret") || "",
+};
+
+/* ================================================================== */
+/* Helpers de formato                                                  */
+/* ================================================================== */
+const D = {
+  bg: "#151109", surface: "#1F1810", card: "#261E14",
+  line: "#3A2F1E", lineSoft: "#2C2317",
+  text: "#F6F1E7", dim: "#B7AC97", faint: "#7C7360",
+  orange: "#F2740B", orangeSoft: "#3A2410",
+  green: "#3FBE79", greenSoft: "#16321F",
+  amber: "#E6A93A", amberSoft: "#37280F",
+  red: "#E8613E", redSoft: "#3A190F",
+};
+
+const toNum = v => Number.isFinite(+v) ? +v : 0;
+const sym = cur => cur === "USD" ? "US$ " : cur === "DKK" ? "DKK " : "$ ";
+
+const compact = n => {
+  const v = toNum(n), a = Math.abs(v);
+  const f = (x, d) => x.toFixed(d).replace(".", ",").replace(/,0$/, "");
+  if (a >= 1_000_000) return f(v/1_000_000, a >= 10_000_000 ? 0 : 1) + "M";
+  if (a >= 100_000) return f(v/1_000, 0) + "K";
+  if (a >= 10_000) return f(v/1_000, 1) + "K";
+  return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(v);
+};
+const heroMoney = (n, cur) => {
+  const v = toNum(n);
+  if (Math.abs(v) >= 100_000) return sym(cur) + compact(v);
+  return new Intl.NumberFormat("es-AR", { style:"currency", currency: cur||"ARS", maximumFractionDigits:0 }).format(v);
+};
+const heroCost = (n, cur) => {
+  if (n == null) return "—";
+  const v = toNum(n), a = Math.abs(v);
+  if (a >= 100_000) return sym(cur) + compact(v);
+  if (a >= 1_000) return new Intl.NumberFormat("es-AR", { style:"currency", currency: cur||"ARS", maximumFractionDigits:0 }).format(v);
+  return new Intl.NumberFormat("es-AR", { style:"currency", currency: cur||"ARS", maximumFractionDigits:2 }).format(v);
+};
+const heroNum = n => toNum(n) >= 10_000 ? compact(n) : new Intl.NumberFormat("es-AR").format(toNum(n));
+const cellMoney = heroMoney;
+const cellCost = heroCost;
+const pct = n => n == null || n === "" ? "—" : `${toNum(n).toFixed(2)}%`;
+const ago = ts => {
+  if (!ts) return "";
+  const s = Math.round((Date.now()-ts)/1000);
+  if (s < 60) return "recién";
+  if (s < 3600) return `hace ${Math.round(s/60)} min`;
+  return `hace ${Math.round(s/3600)} h`;
+};
+const isoToday = () => new Date().toISOString().slice(0,10);
+const isoDaysAgo = n => new Date(Date.now()-n*86400000).toISOString().slice(0,10);
+
+/* ================================================================== */
+/* API client                                                          */
+/* ================================================================== */
+async function apiFetch(path, opts = {}) {
+  const url = CONFIG.serverUrl.replace(/\/$/, "") + path;
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      "x-panel-secret": CONFIG.secret,
+      ...(opts.headers || {}),
+    },
+  });
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+  return data;
+}
+
+/* ================================================================== */
+/* Cuentas                                                             */
+/* ================================================================== */
+const ACCOUNTS = [
+  ["148254890","Piccini","","ARS"],
+  ["249080421","Horizonte","","ARS"],
+  ["2054205255379518","Pueblo Mio Nueva","Pueblo Mio Restaurante","ARS"],
+  ["27457958657139152","Flowin","Flowin CRM","ARS"],
+  ["2494653184289010","Equilibrio 2026","equilibrio.salud.estetica","ARS"],
+  ["881818354230758","Elan Travel","Elan Travel","ARS"],
+  ["2423263937942828","Grossvial 2021","Pucci Design","ARS"],
+  ["613966532424320","Nico Mansilla","","ARS"],
+  ["270071817338033","Soluciones Piscinas","_allfruit","ARS"],
+  ["2997907086965858","Aerosilla","Concepto Comunicación III","ARS"],
+  ["300683204394771","Aqua Fast San Francisco","Concepto Comunicación III","ARS"],
+  ["295010658349521","Aquafast Alta Gracia","Concepto Comunicación III","ARS"],
+  ["783957612137438","Concepto Argentina","Cormoran","ARS"],
+  ["292264855541118","Valholl","san nicolas","ARS"],
+  ["962433610899045","Cámara de Turismo","Cámara de Turismo Carlos Paz","ARS"],
+  ["679501909305318","HartBar","Concepto Comunicación III","ARS"],
+  ["298248388243469","Cormoran","Cormoran","ARS"],
+  ["321917018891850","Espacio Modulos","Valentin","ARS"],
+  ["405266427319447","Libremak","libremak","ARS"],
+  ["673321173295596","Lotus","Carlos Paz Propiedades","ARS"],
+  ["421000975871223","NEW YORK","New York Heladería Café","ARS"],
+  ["934796460662507","Di Rienzo","Di Rienzo Diagnóstico","ARS"],
+  ["671127420449431","Keops Publicidad","Keops","ARS"],
+  ["298671268742251","Mónaco - Hotel & Resort","Hotel Monaco","ARS"],
+  ["268555408746746","Biderbost 2024","Biderbost","ARS"],
+  ["668770170851927","Guapas Bar","Guapas Bar","ARS"],
+  ["1009674249916047","Pueblo Mio Restaurante","Pueblo Mio Restaurante","ARS"],
+  ["2607934066011919","La Pulperia","La Pulperia","ARS"],
+  ["613341067294584","Valhöll Argentina by UTMB","Valhöll Argentina by UTMB","USD"],
+  ["1393004314830939","Actitud Prado","Actitud Prado","ARS"],
+  ["3515954425356367","Joaquin ADS","Joaquin","USD"],
+  ["1356475531568887","Euge CP 2023","eugenia.testore","ARS"],
+  ["607168158088957","Proyectar","gproyectarsanfco","ARS"],
+  ["231514086625158","Host Coworking 2023","Host Coworking","ARS"],
+  ["908140167640188","Simeoni","Joaquin","ARS"],
+  ["924467905838224","Carla Art Studio","Todo diseño","ARS"],
+  ["286226457818437","Graficus ADS","Graficus","ARS"],
+  ["1692451318198396","Rancho Norte","Rancho Norte","ARS"],
+  ["494756873078964","saint tropez","sainttropezhotelsuites","ARS"],
+  ["1308458966986728","COBICO","Billy Concepto","ARS"],
+  ["1051546939997605","VECAT","Glow Park","ARS"],
+  ["8691014401003127","Autogestarse","Autogestarse","ARS"],
+  ["986896830233150","Todo Verde","TODO VERDE","ARS"],
+  ["685840817164309","Valik","Valik","ARS"],
+  ["1397424915044370","Panda Market","Panda Market","ARS"],
+  ["1387524565925014","Wine Group","Wine Group Cordoba","ARS"],
+  ["2610298359318699","Qirubber","Qirubber","ARS"],
+  ["1479515210069384","Fullmart OK","Fullmart","ARS"],
+  ["760147720302294","Raíz Tienda Saludable","Raíz Tienda Natural","ARS"],
+  ["1484075675926924","Zibianca","Zibianca","ARS"],
+  ["24708092905489003","Tienda 1930","Tienda 1930","ARS"],
+  ["1937267670385700","Ostara.ceramica","Portfolio Ostara.ceramica","ARS"],
+  ["3844927925804372","Doménico","Billy Concepto","ARS"],
+  ["1835303394005753","Casa de Blanco","Casa de Blanco","ARS"],
+  ["1345033460089754","hotelkinvcp","hotelkinvcp","ARS"],
+  ["842054995483033","Nacqua","gproyectarsanfco","ARS"],
+  ["642177252260758","MGSO","MGSO","ARS"],
+].map(([id, name, biz, cur]) => ({ id, name: name || biz || "Sin nombre", biz: biz || "", cur }));
+
+/* ================================================================== */
+/* Componentes React (sin JSX — createElement puro)                   */
+/* ================================================================== */
+const { createElement: h, useState, useEffect, useMemo, useCallback, useRef } = React;
+const L = window.lucide || {};
+
+const icon = (name, size = 16, color) => {
+  if (!L[name]) return null;
+  return h(L[name], { size, color, strokeWidth: 2 });
+};
+
+/* Login */
+function Login({ onLogin }) {
+  const [server, setServer] = useState(CONFIG.serverUrl || "https://");
+  const [secret, setSecret] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    setErr(""); setLoading(true);
+    const url = server.replace(/\/$/, "");
+    try {
+      const res = await fetch(url + "/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret }),
+      });
+      const d = await res.json();
+      if (!d.ok) throw new Error("Clave incorrecta");
+      CONFIG.serverUrl = url; CONFIG.secret = secret;
+      localStorage.setItem("cc_server", url);
+      localStorage.setItem("cc_secret", secret);
+      onLogin();
+    } catch (e) {
+      setErr(e.message || "No se pudo conectar con el servidor");
+    }
+    setLoading(false);
+  };
+
+  const inp = (value, onChange, type = "text", placeholder = "") =>
+    h("input", {
+      type, value, onChange: e => onChange(e.target.value), placeholder,
+      style: {
+        width: "100%", background: D.card, border: `1px solid ${D.line}`,
+        borderRadius: 10, color: D.text, fontSize: 14, padding: "12px 14px",
+        outline: "none", fontFamily: "inherit",
+      }
+    });
+
+  return h("div", {
+    style: {
+      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+      background: D.bg, padding: 20,
+    }
+  },
+    h("div", { style: { width: "100%", maxWidth: 420 } },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 32 } },
+        h("div", {
+          style: { width: 44, height: 44, borderRadius: 12, background: D.orange, display: "flex", alignItems: "center", justifyContent: "center" }
+        }, h("div", { style: { width: 16, height: 16, borderRadius: "50%", background: D.bg } })),
+        h("div", null,
+          h("div", { style: { fontSize: 20, fontWeight: 800, color: D.text } }, "Meta Ads · Command Center"),
+          h("div", { style: { fontSize: 12, color: D.faint } }, "Concepto Agencia"),
+        )
+      ),
+      h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
+        h("div", null,
+          h("label", { style: { fontSize: 11, fontWeight: 700, color: D.dim, textTransform: "uppercase", letterSpacing: 0.4, display: "block", marginBottom: 6 } }, "URL del servidor"),
+          inp(server, setServer, "text", "https://tu-app.railway.app"),
+        ),
+        h("div", null,
+          h("label", { style: { fontSize: 11, fontWeight: 700, color: D.dim, textTransform: "uppercase", letterSpacing: 0.4, display: "block", marginBottom: 6 } }, "Clave de acceso"),
+          inp(secret, setSecret, "password", "Tu PANEL_SECRET"),
+        ),
+        err && h("div", { style: { background: D.redSoft, border: `1px solid ${D.red}44`, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: D.text } }, err),
+        h("button", {
+          onClick: submit, disabled: loading || !server || !secret,
+          style: {
+            background: loading ? D.line : D.orange, color: "#fff", border: "none",
+            borderRadius: 10, padding: "13px", fontSize: 14, fontWeight: 700, cursor: "pointer",
+            opacity: (!server || !secret) ? 0.5 : 1, transition: "all 0.15s",
+          }
+        }, loading ? "Conectando…" : "Conectar al panel"),
+      )
+    )
+  );
+}
+
+/* Stat card */
+function Stat({ iconName, label, value, tint, trend }) {
+  return h("div", {
+    style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 14, padding: "13px 14px", minWidth: 0 }
+  },
+    h("div", { style: { display: "flex", alignItems: "center", gap: 7, color: D.dim } },
+      icon(iconName, 13),
+      h("span", { style: { fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, label),
+    ),
+    h("div", { style: { fontSize: 22, fontWeight: 800, color: tint || D.text, marginTop: 8, lineHeight: 1.05, whiteSpace: "nowrap", overflow: "hidden" } }, value),
+    trend && h("div", { style: { marginTop: 5, display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: trend.color, fontWeight: 600 } },
+      icon(trend.dir === "up" ? "TrendingUp" : trend.dir === "down" ? "TrendingDown" : null, 12, trend.color),
+      trend.text,
+    ),
+  );
+}
+
+/* MetricGrid */
+function MetricGrid({ items }) {
+  return h("div", {
+    style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(84px, 1fr))", gap: 10 }
+  }, ...items.map(([l, v, col]) =>
+    h("div", { key: l, style: { minWidth: 0 } },
+      h("div", { style: { fontSize: 9.5, color: D.faint, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 } }, l),
+      h("div", { style: { fontSize: 13.5, fontWeight: 700, color: col || D.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 } }, v),
+    )
+  ));
+}
+
+/* Fila de creativo */
+function CreativeRow({ ad, cur }) {
+  const active = /activ/i.test(ad.status || "");
+  return h("div", { style: { background: D.bg, border: `1px solid ${D.lineSoft}`, borderRadius: 10, padding: "10px 12px" } },
+    h("div", { style: { display: "flex", alignItems: "center", gap: 7, marginBottom: 8 } },
+      icon("Image", 12, D.orange),
+      h("span", { style: { fontSize: 12.5, fontWeight: 600, color: D.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } }, ad.name || "Anuncio sin nombre"),
+      ad.format && h("span", { style: { fontSize: 9.5, fontWeight: 700, color: D.dim, background: D.lineSoft, padding: "2px 6px", borderRadius: 5, textTransform: "uppercase" } }, ad.format),
+      h("span", { style: { fontSize: 9.5, fontWeight: 700, color: active ? D.green : D.faint, background: active ? D.greenSoft : D.lineSoft, padding: "2px 6px", borderRadius: 5 } }, active ? "ON" : "OFF"),
+    ),
+    h(MetricGrid, { items: [
+      ["Gasto", cellMoney(ad.spend, cur), D.orange],
+      ["Conv.", heroNum(ad.conversations)],
+      ["C/msj", cellCost(ad.cost_per_msg, cur)],
+      ["Alcance", heroNum(ad.reach)],
+      ["Impr.", heroNum(ad.impressions)],
+      ["CTR", pct(ad.ctr), toNum(ad.ctr) >= 1 ? D.green : null],
+    ]}),
+  );
+}
+
+/* Tarjeta de campaña con drill-down */
+function CampaignCard({ c, cur, range }) {
+  const [expanded, setExpanded] = useState(null);
+  const active = /activ/i.test(c.status || "");
+
+  const toggle = async () => {
+    if (expanded) { setExpanded(null); return; }
+    if (!c.id) return;
+    setExpanded({ state: "loading" });
+    try {
+      const params = new URLSearchParams({ range: range.key });
+      if (range.key === "custom") { params.set("from", range.from); params.set("to", range.to); }
+      const data = await apiFetch(`/api/campaign/${c.id}/ads?${params}`);
+      setExpanded({ state: "done", data });
+    } catch (e) {
+      setExpanded({ state: "error", error: e.message });
+    }
+  };
+
+  return h("div", {
+    style: { background: D.surface, border: `1px solid ${expanded?.state === "done" ? D.orange : D.lineSoft}`, borderRadius: 12, transition: "border-color 0.2s" }
+  },
+    h("div", { onClick: toggle, style: { padding: "12px 14px", cursor: "pointer" } },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } },
+        h("span", { style: { width: 7, height: 7, borderRadius: "50%", background: active ? D.green : D.faint, flexShrink: 0 } }),
+        h("span", { style: { fontSize: 13.5, fontWeight: 700, color: D.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } }, c.name || "Campaña sin nombre"),
+        c.objective && h("span", { style: { fontSize: 9.5, fontWeight: 700, color: D.dim, background: D.lineSoft, padding: "2px 7px", borderRadius: 5, textTransform: "uppercase" } }, c.objective),
+        h("span", { style: { fontSize: 10, fontWeight: 700, color: active ? D.green : D.faint, background: active ? D.greenSoft : D.lineSoft, padding: "2px 7px", borderRadius: 6 } }, active ? "ACTIVA" : "PAUSADA"),
+        icon(expanded ? "ChevronDown" : "ChevronRight", 16, D.faint),
+      ),
+      h(MetricGrid, { items: [
+        ["Gasto", cellMoney(c.spend, cur), D.orange],
+        ["Conversac.", heroNum(c.conversations)],
+        ["Costo/msj", cellCost(c.cost_per_msg, cur)],
+        ["Alcance", heroNum(c.reach)],
+        ["Impres.", heroNum(c.impressions)],
+        ["CTR", pct(c.ctr), toNum(c.ctr) >= 1 ? D.green : null],
+      ]}),
+    ),
+    expanded && h("div", { style: { borderTop: `1px solid ${D.lineSoft}`, padding: "12px 14px" } },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 7, marginBottom: 10 } },
+        icon("Image", 12, D.orange),
+        h("span", { style: { fontSize: 11, fontWeight: 800, color: D.text, letterSpacing: 0.4 } }, "ANUNCIOS DE ESTA CAMPAÑA"),
+        expanded.data && h("span", { style: { fontSize: 10.5, color: D.faint } }, `(${(expanded.data.ads||[]).length})`),
+      ),
+      expanded.state === "loading" && h("div", { style: { display: "flex", alignItems: "center", gap: 8, color: D.dim, fontSize: 12.5, padding: "12px 0" } },
+        h("span", { className: "spin" }, icon("Loader2", 14, D.dim)), " Trayendo anuncios…"
+      ),
+      expanded.state === "error" && h("div", { style: { color: D.red, fontSize: 12.5, padding: "6px 0" } }, expanded.error),
+      expanded.state === "done" && expanded.data && h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+        ...(expanded.data.ads || []).map((ad, i) => h(CreativeRow, { key: ad.id || i, ad, cur: expanded.data.currency || cur })),
+        (!expanded.data.ads || expanded.data.ads.length === 0) && h("div", { style: { fontSize: 12.5, color: D.faint, padding: "6px 0" } }, "Esta campaña no tiene anuncios con datos en el período."),
+      ),
+    ),
+  );
+}
+
+/* Home */
+function Home({ pinned, onPin, onOpen }) {
+  const [q, setQ] = useState("");
+  const rows = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    let r = ACCOUNTS.filter(a => !s || a.name.toLowerCase().includes(s) || a.biz.toLowerCase().includes(s) || a.id.includes(s));
+    r.sort((a, b) => {
+      const pa = pinned.includes(a.id) ? 0 : 1, pb = pinned.includes(b.id) ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return a.name.localeCompare(b.name, "es");
+    });
+    return r.slice(0, 10);
+  }, [q, pinned]);
+
+  return h("div", null,
+    h("div", { style: { display: "flex", alignItems: "center", gap: 8, background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: "0 12px", marginBottom: 14 } },
+      icon("Search", 16, D.faint),
+      h("input", {
+        value: q, onChange: e => setQ(e.target.value), autoFocus: true,
+        placeholder: "Buscar cliente por nombre o negocio…",
+        style: { border: "none", outline: "none", background: "transparent", color: D.text, fontSize: 14, padding: "12px 0", width: "100%", fontFamily: "inherit" },
+      }),
+    ),
+    h("div", { style: { fontSize: 11, color: D.faint, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 } },
+      q ? `${rows.length} resultado${rows.length === 1 ? "" : "s"}` : "Clientes fijados y frecuentes"
+    ),
+    h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+      ...rows.map(a => {
+        const on = pinned.includes(a.id);
+        return h("div", {
+          key: a.id, onClick: () => onOpen(a.id),
+          style: { display: "flex", alignItems: "center", gap: 12, background: D.card, border: `1px solid ${on ? D.orange : D.line}`, borderRadius: 12, padding: "13px 14px", cursor: "pointer" },
+        },
+          h("button", {
+            onClick: e => { e.stopPropagation(); onPin(a.id); },
+            style: { background: "none", border: "none", cursor: "pointer", padding: 0, color: on ? D.orange : D.faint, flexShrink: 0 },
+          }, icon("Star", 17, on ? D.orange : D.faint)),
+          h("div", { style: { minWidth: 0, flex: 1 } },
+            h("div", { style: { fontSize: 14.5, fontWeight: 700, color: D.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, a.name),
+            h("div", { style: { fontSize: 11.5, color: D.faint, marginTop: 1 } }, a.biz || ""),
+          ),
+          icon("ChevronRight", 18, D.faint),
+        );
+      }),
+      rows.length === 0 && h("div", { style: { color: D.faint, fontSize: 13, textAlign: "center", padding: "30px 0" } }, "Sin coincidencias."),
+    ),
+  );
+}
+
+/* RangeControl */
+function RangeControl({ range, setRange }) {
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState(range.key === "custom" ? range.from : isoDaysAgo(14));
+  const [to, setTo] = useState(range.key === "custom" ? range.to : isoToday());
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+
+  const apply = () => {
+    if (!from || !to || from > to) return;
+    setRange({ key: "custom", from, to });
+    setOpen(false);
+  };
+
+  const inp = (value, onChange, min, max) => h("input", {
+    type: "date", value, min, max, onChange: e => onChange(e.target.value),
+    style: { flex: 1, background: D.bg, border: `1px solid ${D.line}`, borderRadius: 8, color: D.text, fontSize: 12.5, padding: "7px 9px", outline: "none", fontFamily: "inherit", colorScheme: "dark" },
+  });
+
+  return h("div", { style: { position: "relative" } },
+    h("div", { style: { display: "inline-flex", gap: 3, background: D.card, border: `1px solid ${D.line}`, borderRadius: 10, padding: 3 } },
+      ...["d7","d30"].map(k => h("button", {
+        key: k, onClick: () => { setRange({ key: k }); setOpen(false); },
+        style: { padding: "6px 11px", fontSize: 12.5, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", background: range.key === k ? D.orange : "transparent", color: range.key === k ? "#fff" : D.dim },
+      }, k === "d7" ? "7 días" : "30 días")),
+      h("button", {
+        onClick: () => setOpen(v => !v),
+        style: { padding: "6px 10px", fontSize: 12.5, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", background: range.key === "custom" ? D.orange : "transparent", color: range.key === "custom" ? "#fff" : D.dim, display: "inline-flex", alignItems: "center", gap: 5 },
+      }, icon("Calendar", 12), range.key === "custom" ? `${range.from} → ${range.to}` : "Personalizado"),
+    ),
+    open && h("div", {
+      style: { position: "absolute", top: "calc(100% + 6px)", right: 0, background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: 12, zIndex: 10, boxShadow: "0 12px 32px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", gap: 10, minWidth: 280 },
+    },
+      h("div", { style: { fontSize: 11, fontWeight: 700, color: D.dim, letterSpacing: 0.3, textTransform: "uppercase" } }, "Rango personalizado"),
+      h("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+        inp(from, setFrom, null, to || isoToday()),
+        h("span", { style: { color: D.faint, fontSize: 12 } }, "→"),
+        inp(to, setTo, from, isoToday()),
+      ),
+      h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+        ...[ ["Ayer", isoDaysAgo(1), isoDaysAgo(1)], ["14 días", isoDaysAgo(14), isoToday()], ["Este mes", monthStart, isoToday()], ["90 días", isoDaysAgo(90), isoToday()] ]
+        .map(([lbl, f, t]) => h("button", {
+          key: lbl, onClick: () => { setFrom(f); setTo(t); },
+          style: { fontSize: 11, fontWeight: 600, padding: "5px 9px", borderRadius: 6, border: `1px solid ${D.line}`, background: "transparent", color: D.dim, cursor: "pointer" },
+        }, lbl)),
+      ),
+      h("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" } },
+        h("button", { onClick: () => setOpen(false), style: { fontSize: 12, fontWeight: 700, padding: "7px 12px", borderRadius: 8, border: `1px solid ${D.line}`, background: "transparent", color: D.dim, cursor: "pointer" } }, "Cancelar"),
+        h("button", { onClick: apply, style: { fontSize: 12, fontWeight: 700, padding: "7px 14px", borderRadius: 8, border: "none", background: D.orange, color: "#fff", cursor: "pointer" } }, "Aplicar"),
+      ),
+    ),
+  );
+}
+
+/* Detail */
+function Detail({ account, range, setRange }) {
+  const [state, setState] = useState("loading");
+  const [data, setData] = useState(null);
+  const [ts, setTs] = useState(null);
+  const [err, setErr] = useState(null);
+  const [an, setAn] = useState(null);
+  const [anState, setAnState] = useState("idle");
+  const [target, setTarget] = useState(localStorage.getItem(`tgt:${account.id}`) || "");
+  const [editTarget, setEditTarget] = useState(false);
+  const reqId = useRef(0);
+
+  const cur = data?.currency || account.cur;
+
+  const run = useCallback(async (force = false) => {
+    const my = ++reqId.current;
+    setErr(null); setState("loading"); setAn(null); setAnState("idle");
+    try {
+      const params = new URLSearchParams({ range: range.key });
+      if (range.key === "custom") { params.set("from", range.from); params.set("to", range.to); }
+      if (force) params.set("_force", "1"); // el servidor ignora esto, pero evita que el browser cachee
+      const d = await apiFetch(`/api/account/${account.id}?${params}`);
+      if (my !== reqId.current) return;
+      setData(d); setTs(Date.now()); setState("done");
+
+      // Análisis IA en paralelo
+      setAnState("loading");
+      const phrase = range.key === "d7" ? "los últimos 7 días" : range.key === "d30" ? "los últimos 30 días" : `del ${range.from} al ${range.to}`;
+      apiFetch(`/api/account/${account.id}/analysis`, {
+        method: "POST",
+        body: JSON.stringify({ name: account.name, phrase, payload: d }),
+      }).then(a => {
+        if (my !== reqId.current) return;
+        setAn(a); setAnState("done");
+      }).catch(() => {
+        if (my === reqId.current) setAnState("error");
+      });
+    } catch (e) {
+      if (my === reqId.current) { setErr(e.message); setState("error"); }
+    }
+  }, [account.id, account.name, range]);
+
+  useEffect(() => { run(false); }, [run]);
+
+  const acc = data?.account || {};
+  const nowVal = toNum(acc.cost_per_msg);
+  const prev = data?.prev_cost_per_msg;
+  const delta = prev && toNum(prev) > 0 ? (nowVal - toNum(prev)) / toNum(prev) : null;
+  const tgt = target === "" ? null : +target;
+
+  const alerts = useMemo(() => {
+    if (state !== "done") return [];
+    const out = [];
+    if (delta != null) {
+      if (delta > 0.15) out.push({ sev: delta > 0.4 ? "red" : "amber", text: `El costo por mensaje subió ${Math.round(delta*100)}% respecto al período anterior (${heroCost(prev, cur)} → ${heroCost(nowVal, cur)}).` });
+      else if (delta < -0.1) out.push({ sev: "green", text: `El costo por mensaje bajó ${Math.abs(Math.round(delta*100))}% respecto al período anterior. Buen momento para escalar.` });
+    }
+    if (tgt != null) {
+      if (nowVal > tgt) out.push({ sev: "red", text: `Costo por mensaje ${heroCost(nowVal, cur)} por encima del objetivo de ${heroCost(tgt, cur)}.` });
+      else out.push({ sev: "green", text: `Costo por mensaje dentro del objetivo (${heroCost(nowVal, cur)} ≤ ${heroCost(tgt, cur)}).` });
+    }
+    if (!out.length) out.push({ sev: "green", text: "Sin alertas en esta ventana — costo por mensaje estable." });
+    return out;
+  }, [state, delta, prev, nowVal, tgt, cur]);
+
+  const trendCPM = delta == null ? null : { dir: delta > 0.02 ? "up" : delta < -0.02 ? "down" : "flat", color: delta > 0.15 ? D.red : delta < -0.1 ? D.green : D.dim, text: `${delta > 0 ? "+" : ""}${Math.round(delta*100)}% vs. anterior` };
+  const sevColor = { red: [D.red, D.redSoft], amber: [D.amber, D.amberSoft], green: [D.green, D.greenSoft] };
+
+  return h("div", null,
+    /* Barra de cuenta */
+    h("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 } },
+      h("div", { style: { minWidth: 0, flex: 1 } },
+        h("div", { style: { fontSize: 18, fontWeight: 800, color: D.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, account.name),
+        h("div", { style: { fontSize: 11.5, color: D.faint } }, `${account.biz} · #${account.id}`),
+      ),
+      h(RangeControl, { range, setRange }),
+      h("button", {
+        onClick: () => run(true), disabled: state === "loading",
+        style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, borderRadius: 10, border: `1px solid ${D.line}`, background: D.card, color: D.text, cursor: "pointer", opacity: state === "loading" ? 0.6 : 1 },
+      }, state === "loading" ? h("span", { className: "spin" }, icon("Loader2", 14)) : icon("RefreshCw", 14), state === "loading" ? "Trayendo…" : "Actualizar"),
+    ),
+
+    /* Error */
+    state === "error" && h("div", { style: { background: D.redSoft, border: `1px solid ${D.red}44`, borderRadius: 12, padding: 14, color: D.text, fontSize: 13, display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 14 } },
+      icon("AlertTriangle", 16, D.red),
+      h("div", { style: { flex: 1 } }, err),
+      h("button", { onClick: () => run(true), style: { color: D.red, background: "none", border: "none", fontWeight: 700, cursor: "pointer" } }, "Reintentar"),
+    ),
+
+    /* Loading */
+    state === "loading" && !data && h("div", { style: { textAlign: "center", color: D.dim, padding: "50px 0", fontSize: 13.5 } },
+      h("span", { className: "spin", style: { display: "block", marginBottom: 12 } }, icon("Loader2", 28, D.orange)),
+      "Consultando Meta Ads en vivo…",
+      h("br"), h("span", { style: { fontSize: 11, color: D.faint } }, "La primera consulta tarda 15-30 segundos. Las siguientes son instantáneas."),
+    ),
+
+    data && h("div", null,
+      /* Hero stats */
+      h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 10 } },
+        h(Stat, { iconName: "DollarSign", label: "Gasto total", value: heroMoney(acc.spend, cur), tint: D.orange }),
+        h(Stat, { iconName: "MessageCircle", label: "Conversaciones", value: heroNum(acc.conversations) }),
+        h(Stat, { iconName: "Target", label: "Costo por mensaje", value: heroCost(acc.cost_per_msg, cur), trend: trendCPM }),
+        h(Stat, { iconName: "Users", label: "Alcance", value: heroNum(acc.reach) }),
+        h(Stat, { iconName: "Eye", label: "Impresiones", value: heroNum(acc.impressions) }),
+        h(Stat, { iconName: "MousePointerClick", label: "CTR", value: pct(acc.ctr), tint: toNum(acc.ctr) >= 1 ? D.green : D.text }),
+      ),
+
+      /* Alertas */
+      h("div", { style: { marginTop: 16, background: D.surface, border: `1px solid ${D.line}`, borderRadius: 14, padding: "14px 15px" } },
+        h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" } },
+          icon("AlertTriangle", 15, D.amber),
+          h("span", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 } }, "PANEL DE ALERTAS"),
+          h("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: D.dim } },
+            h("span", null, "Objetivo costo/msj:"),
+            editTarget
+              ? h("input", { autoFocus: true, type: "number", value: target, placeholder: "0", onChange: e => { setTarget(e.target.value); localStorage.setItem(`tgt:${account.id}`, e.target.value); }, onBlur: () => setEditTarget(false), onKeyDown: e => e.key === "Enter" && setEditTarget(false), style: { width: 74, background: D.card, border: `1px solid ${D.orange}`, borderRadius: 7, color: D.text, fontSize: 12, padding: "4px 7px", outline: "none", fontFamily: "inherit" } })
+              : h("button", { onClick: () => setEditTarget(true), style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 7, color: target ? D.text : D.faint, fontSize: 12, fontWeight: 700, padding: "4px 9px", cursor: "pointer" } }, target ? heroCost(+target, cur) : "definir"),
+          ),
+        ),
+        h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+          ...alerts.map((al, i) => {
+            const [c, bg] = sevColor[al.sev];
+            return h("div", { key: i, style: { display: "flex", gap: 9, alignItems: "flex-start", background: bg, border: `1px solid ${c}33`, borderRadius: 10, padding: "10px 12px" } },
+              icon(al.sev === "green" ? "CheckCircle2" : "AlertTriangle", 15, c),
+              h("span", { style: { fontSize: 12.5, color: D.text, lineHeight: 1.5 } }, al.text),
+            );
+          }),
+        ),
+      ),
+
+      /* Análisis IA */
+      h("div", { style: { marginTop: 16, background: D.card, border: `1px solid ${D.line}`, borderRadius: 14, padding: "14px 15px" } },
+        h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
+          icon("Sparkles", 15, D.orange),
+          h("span", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 } }, "RESUMEN IA"),
+          anState === "loading" && h("span", { className: "spin", style: { marginLeft: 4 } }, icon("Loader2", 13, D.faint)),
+        ),
+        anState === "loading" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "Analizando cuenta y campañas…"),
+        anState === "error" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "No se pudo generar el análisis. ", h("button", { onClick: () => run(true), style: { color: D.orange, background: "none", border: "none", cursor: "pointer", fontWeight: 700 } }, "Reintentar")),
+        anState === "done" && an && h("div", null,
+          an.veredicto && h("div", { style: { fontSize: 13.5, color: D.text, fontWeight: 600, marginBottom: 12, lineHeight: 1.5 } }, an.veredicto),
+          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 } },
+            h("div", { style: { background: D.greenSoft, borderRadius: 10, padding: "11px 13px" } },
+              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.green, marginBottom: 7, letterSpacing: 0.3 } }, "LO BUENO"),
+              ...(an.bueno || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.green } }, "+"), t)),
+            ),
+            h("div", { style: { background: D.redSoft, borderRadius: 10, padding: "11px 13px" } },
+              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.red, marginBottom: 7, letterSpacing: 0.3 } }, "A MEJORAR"),
+              ...(an.malo || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.red } }, "–"), t)),
+            ),
+          ),
+        ),
+      ),
+
+      /* Campañas */
+      h("div", { style: { marginTop: 16 } },
+        h("div", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3, marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+          icon("BarChart3", 15, D.orange), " CAMPAÑAS ",
+          h("span", { style: { color: D.faint, fontWeight: 600 } }, `(${(data.campaigns||[]).length})`),
+          h("span", { style: { color: D.faint, fontWeight: 500, fontSize: 11, marginLeft: "auto" } }, "Tocá una campaña para ver sus anuncios"),
+        ),
+        h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+          ...(data.campaigns || []).map((c, i) => h(CampaignCard, { key: c.id || i, c, cur, range })),
+          (!data.campaigns || data.campaigns.length === 0) && h("div", { style: { fontSize: 12.5, color: D.faint, padding: "10px 0" } }, "No se encontraron campañas con datos en este período."),
+        ),
+      ),
+
+      ts && h("div", { style: { fontSize: 11, color: D.faint, textAlign: "center", marginTop: 16, lineHeight: 1.6 } },
+        `Datos ${data.fromCache ? "📦 desde caché del servidor" : "🔴 en vivo"} · actualizado ${ago(ts)} · próxima actualización automática en ${Math.round(CACHE_TTL/60)} min`,
+      ),
+    ),
+  );
+}
+
+/* App principal */
+function App() {
+  const [authed, setAuthed] = useState(!!(CONFIG.serverUrl && CONFIG.secret));
+  const [view, setView] = useState({ name: "home" });
+  const [range, setRange] = useState({ key: "d7" });
+  const [pinned, setPinned] = useState(() => JSON.parse(localStorage.getItem("cc_pinned") || "[]"));
+
+  const onPin = (id) => {
+    setPinned(prev => {
+      const nx = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      localStorage.setItem("cc_pinned", JSON.stringify(nx));
+      return nx;
+    });
+  };
+
+  const account = view.name === "detail" ? ACCOUNTS.find(a => a.id === view.id) : null;
+
+  if (!authed) return h(Login, { onLogin: () => setAuthed(true) });
+
+  return h("div", { style: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif", background: D.bg, color: D.text, borderRadius: 16, minHeight: "100vh", padding: 20 } },
+    /* Header */
+    h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 18 } },
+      view.name === "detail"
+        ? h("button", { onClick: () => setView({ name: "home" }), style: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 38, height: 38, borderRadius: 11, background: D.card, border: `1px solid ${D.line}`, color: D.text, cursor: "pointer", flexShrink: 0 } }, icon("ArrowLeft", 18))
+        : h("div", { style: { width: 38, height: 38, borderRadius: 11, background: D.orange, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+            h("div", { style: { width: 14, height: 14, borderRadius: "50%", background: D.bg } }),
+          ),
+      h("div", { style: { flex: 1, minWidth: 0 } },
+        h("div", { style: { fontSize: 17, fontWeight: 800, lineHeight: 1.1 } }, "Meta Ads · Command Center"),
+        h("div", { style: { fontSize: 12, color: D.faint } }, "Concepto Agencia"),
+      ),
+      h("div", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: D.green, background: D.greenSoft, padding: "5px 10px", borderRadius: 20, flexShrink: 0 } },
+        icon("Wifi", 13, D.green), " En vivo",
+      ),
+      h("button", {
+        onClick: () => { localStorage.removeItem("cc_secret"); CONFIG.secret = ""; setAuthed(false); },
+        title: "Cerrar sesión",
+        style: { background: "none", border: "none", cursor: "pointer", color: D.faint, padding: "4px 8px" },
+      }, icon("LogOut", 15, D.faint)),
+    ),
+
+    view.name === "home"
+      ? h(Home, { pinned, onPin, onOpen: id => setView({ name: "detail", id }) })
+      : account
+        ? h(Detail, { account, range, setRange })
+        : h("div", { style: { color: D.faint, textAlign: "center", padding: 40 } }, "Cuenta no disponible."),
+  );
+}
+
+const CACHE_TTL = 900;
+ReactDOM.createRoot(document.getElementById("root")).render(h(App, null));
+</script>
+</body>
+</html>

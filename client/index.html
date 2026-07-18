@@ -329,6 +329,144 @@ function CreativeRow({ ad, cur }) {
   );
 }
 
+/* Sección de audiencia con visualizaciones */
+function AudienceSection({ campaignId, range }) {
+  const [state, setState] = useState("idle");
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+
+  const load = async () => {
+    setState("loading"); setErr(null);
+    try {
+      const params = new URLSearchParams({ range: range.key });
+      if (range.key === "custom") { params.set("from", range.from); params.set("to", range.to); }
+      const d = await apiFetch(`/api/campaign/${campaignId}/audience?${params}`);
+      setData(d); setState("done");
+    } catch(e) { setErr(e.message); setState("error"); }
+  };
+
+  const PINK = "#C13584";
+  const BLUE = "#4267B2";
+  const PURPLE = "#8B5CF6";
+  const TEAL = "#0EA5E9";
+
+  const platformColor = p => {
+    if (/instagram/i.test(p)) return PINK;
+    if (/facebook/i.test(p)) return BLUE;
+    if (/audience/i.test(p)) return PURPLE;
+    return TEAL;
+  };
+
+  const genderColor = l => /mujer/i.test(l) ? PINK : /hombre/i.test(l) ? BLUE : D.dim;
+
+  if (state === "idle") return h("div", { style: { marginTop: 12 } },
+    h("button", {
+      onClick: load,
+      style: { display: "inline-flex", alignItems: "center", gap: 7, background: D.lineSoft, border: `1px solid ${D.line}`, color: D.dim, borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" },
+    }, icon("PieChart", 13, D.dim), "Ver audiencia"),
+  );
+
+  if (state === "loading") return h("div", { style: { marginTop: 12, display: "flex", alignItems: "center", gap: 8, color: D.dim, fontSize: 12.5, padding: "12px 0" } },
+    h("span", { className: "spin" }, icon("Loader2", 14, D.dim)), "Trayendo datos de audiencia…"
+  );
+
+  if (state === "error") return h("div", { style: { marginTop: 12, color: D.red, fontSize: 12 } },
+    err, " ", h("button", { onClick: load, style: { color: D.orange, background: "none", border: "none", cursor: "pointer", fontWeight: 700 } }, "Reintentar")
+  );
+
+  if (!data) return null;
+
+  // Donut SVG para género
+  const DonutChart = ({ items }) => {
+    const total = items.reduce((s, i) => s + i.pct, 0) || 1;
+    let offset = 0;
+    const R = 40, CX = 50, CY = 50, stroke = 14;
+    const circumference = 2 * Math.PI * R;
+    const segments = items.map((item, i) => {
+      const dash = (item.pct / 100) * circumference;
+      const gap = circumference - dash;
+      const seg = h("circle", {
+        key: i, cx: CX, cy: CY, r: R,
+        fill: "none", stroke: genderColor(item.label),
+        strokeWidth: stroke,
+        strokeDasharray: `${dash} ${gap}`,
+        strokeDashoffset: -offset * circumference / 100,
+        style: { transition: "stroke-dasharray 0.5s" },
+      });
+      offset += item.pct;
+      return seg;
+    });
+    return h("svg", { viewBox: "0 0 100 100", width: 90, height: 90, style: { transform: "rotate(-90deg)" } }, ...segments);
+  };
+
+  // Barra horizontal
+  const Bar = ({ label, pct: p, color, extra }) =>
+    h("div", { style: { marginBottom: 8 } },
+      h("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 3 } },
+        h("span", { style: { fontSize: 11.5, color: D.text, fontWeight: 600 } }, label),
+        h("span", { style: { fontSize: 11.5, color: color || D.orange, fontWeight: 700 } }, `${p}%`),
+      ),
+      h("div", { style: { height: 6, background: D.lineSoft, borderRadius: 3, overflow: "hidden" } },
+        h("div", { style: { height: "100%", width: `${p}%`, background: color || D.orange, borderRadius: 3, transition: "width 0.5s" } }),
+      ),
+      extra && h("div", { style: { fontSize: 10, color: D.faint, marginTop: 2 } }, extra),
+    );
+
+  const Section = ({ title, children }) =>
+    h("div", { style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: "12px 14px" } },
+      h("div", { style: { fontSize: 10, fontWeight: 800, color: D.faint, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 10 } }, title),
+      children,
+    );
+
+  const hasData = arr => arr && arr.length > 0;
+
+  return h("div", { style: { marginTop: 14 } },
+    h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } },
+      icon("PieChart", 13, D.orange),
+      h("span", { style: { fontSize: 11, fontWeight: 800, color: D.text, letterSpacing: 0.4, textTransform: "uppercase" } }, "AUDIENCIA"),
+      h("button", {
+        onClick: () => { setData(null); setState("idle"); },
+        style: { marginLeft: "auto", background: "none", border: "none", color: D.faint, cursor: "pointer", fontSize: 11 },
+      }, "Ocultar"),
+    ),
+    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 } },
+
+      /* Género */
+      hasData(data.gender) && h(Section, { title: "Género" },
+        h("div", { style: { display: "flex", alignItems: "center", gap: 14 } },
+          h(DonutChart, { items: data.gender }),
+          h("div", { style: { flex: 1 } },
+            ...data.gender.map(g =>
+              h("div", { key: g.label, style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 8 } },
+                h("div", { style: { width: 10, height: 10, borderRadius: "50%", background: genderColor(g.label), flexShrink: 0 } }),
+                h("div", null,
+                  h("div", { style: { fontSize: 12.5, fontWeight: 700, color: D.text } }, `${g.pct}%`),
+                  h("div", { style: { fontSize: 10.5, color: D.faint } }, g.label),
+                ),
+              )
+            ),
+          ),
+        ),
+      ),
+
+      /* Edad */
+      hasData(data.age) && h(Section, { title: "Edad" },
+        ...data.age.map(a => h(Bar, { key: a.label, label: a.label, pct: a.pct, color: D.orange })),
+      ),
+
+      /* Plataforma */
+      hasData(data.platform) && h(Section, { title: "Plataforma" },
+        ...data.platform.map(p => h(Bar, { key: p.label, label: p.label, pct: p.pct, color: platformColor(p.label) })),
+      ),
+
+      /* Regiones */
+      hasData(data.region) && h(Section, { title: "Ciudades / Provincias" },
+        ...data.region.map(r => h(Bar, { key: r.label, label: r.label, pct: r.pct, color: TEAL })),
+      ),
+    ),
+  );
+}
+
 /* Tarjeta de campaña con drill-down */
 function CampaignCard({ c, cur, range }) {
   const [expanded, setExpanded] = useState(null);
@@ -381,7 +519,9 @@ function CampaignCard({ c, cur, range }) {
     ),
     /* Drill-down anuncios */
     expanded && h("div", { style: { borderTop: `1px solid ${D.lineSoft}`, background: D.bg, padding: "14px 16px" } },
-      h("div", { style: { display: "flex", alignItems: "center", gap: 7, marginBottom: 12 } },
+      /* Audiencia */
+      h(AudienceSection, { campaignId: c.id, range }),
+      h("div", { style: { marginTop: 14, display: "flex", alignItems: "center", gap: 7, marginBottom: 12 } },
         icon("Image", 12, D.orange),
         h("span", { style: { fontSize: 11, fontWeight: 800, color: D.text, letterSpacing: 0.4 } }, "ANUNCIOS"),
         expanded.data && h("span", { style: { fontSize: 10.5, color: D.faint } }, `(${(expanded.data.ads||[]).length})`),
@@ -605,6 +745,7 @@ function Detail({ account, range, setRange }) {
         h(Stat, { iconName: "Users", label: "Alcance", value: heroNum(acc.reach) }),
         h(Stat, { iconName: "Eye", label: "Impresiones", value: heroNum(acc.impressions) }),
         h(Stat, { iconName: "MousePointerClick", label: "CTR", value: pct(acc.ctr), tint: toNum(acc.ctr) >= 1 ? D.green : D.text }),
+        toNum(acc.ig_follows) > 0 && h(Stat, { iconName: "UserPlus", label: "Seguidores IG", value: heroNum(acc.ig_follows), tint: "#C13584" }),
       ),
 
       /* Alertas */

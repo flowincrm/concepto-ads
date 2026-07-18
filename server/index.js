@@ -54,7 +54,6 @@ const cache = {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/* Graph API */
 async function fbGet(endpoint, params = {}) {
   const url = new URL(`${FB}/${endpoint}`);
   url.searchParams.set("access_token", META_TOKEN);
@@ -74,12 +73,8 @@ function rangeToParams(range, from, to) {
 
 function prevRangeParams(range, from, to) {
   const D = 86400000;
-  if (range === "d7") {
-    return { time_range: JSON.stringify({ since: new Date(Date.now()-14*D).toISOString().slice(0,10), until: new Date(Date.now()-7*D).toISOString().slice(0,10) }) };
-  }
-  if (range === "d30") {
-    return { time_range: JSON.stringify({ since: new Date(Date.now()-60*D).toISOString().slice(0,10), until: new Date(Date.now()-30*D).toISOString().slice(0,10) }) };
-  }
+  if (range === "d7") return { time_range: JSON.stringify({ since: new Date(Date.now()-14*D).toISOString().slice(0,10), until: new Date(Date.now()-7*D).toISOString().slice(0,10) }) };
+  if (range === "d30") return { time_range: JSON.stringify({ since: new Date(Date.now()-60*D).toISOString().slice(0,10), until: new Date(Date.now()-30*D).toISOString().slice(0,10) }) };
   if (range === "custom" && from && to) {
     const days = Math.round((new Date(to) - new Date(from)) / D);
     const prevTo = new Date(new Date(from) - D);
@@ -106,6 +101,10 @@ function extractCPM(cpa = [], conv = 0, spend = 0) {
   if (conv > 0 && spend > 0) return spend / conv;
   return null;
 }
+function extractAction(actions = [], type) {
+  const a = (actions||[]).find(x => x.action_type === type);
+  return a ? parseFloat(a.value) : 0;
+}
 function translateObj(obj = "") {
   const m = { MESSAGES:"Mensajes",CONVERSIONS:"Conversiones",LINK_CLICKS:"Tráfico",VIDEO_VIEWS:"Videos",REACH:"Alcance",BRAND_AWARENESS:"Reconocimiento",LEAD_GENERATION:"Leads",APP_INSTALLS:"App",OUTCOME_TRAFFIC:"Tráfico",OUTCOME_ENGAGEMENT:"Interacción",OUTCOME_LEADS:"Leads",OUTCOME_SALES:"Ventas",OUTCOME_AWARENESS:"Reconocimiento",OUTCOME_APP_PROMOTION:"App" };
   return m[obj] || obj || "";
@@ -117,7 +116,9 @@ function detectFormat(t = "") {
   return "imagen";
 }
 
-/* Métricas de cuenta */
+/* ------------------------------------------------------------------ */
+/*  Métricas de cuenta                                                  */
+/* ------------------------------------------------------------------ */
 async function fetchAccountMetrics(accountId, range, from, to) {
   const rp = rangeToParams(range, from, to);
   const prevRp = prevRangeParams(range, from, to);
@@ -134,7 +135,28 @@ async function fetchAccountMetrics(accountId, range, from, to) {
   const spend = parseFloat(ins.spend || 0);
   const conv = extractConv(ins.actions);
 
-  // Traer status y objective de campañas con actividad
+  // Seguidores e interacciones IG desde acciones de los anuncios
+  const igFollows = extractAction(ins.actions, "follow");
+  const igProfileVisits = extractAction(ins.actions, "onsite_conversion.post_save") + extractAction(ins.actions, "page_engagement");
+
+  // Intentar traer seguidores IG reales si la cuenta tiene IG conectado
+  let igFollowersDelta = igFollows; // fallback: seguidores por anuncios
+  try {
+    const igRes = await fbGet(`act_${accountId}`, { fields: "instagram_actor_id" });
+    if (igRes.instagram_actor_id) {
+      const igInsights = await fbGet(`${igRes.instagram_actor_id}/insights`, {
+        metric: "follower_count",
+        period: "day",
+        ...rp,
+      });
+      if (igInsights.data?.[0]?.values) {
+        const vals = igInsights.data[0].values;
+        igFollowersDelta = vals.reduce((s, v) => s + (v.value || 0), 0);
+      }
+    }
+  } catch { /* sin IG conectado, usamos el fallback */ }
+
+  // Campañas
   const campInsData = campIns.data || [];
   let campMeta = {};
   if (campInsData.length > 0) {
@@ -166,6 +188,7 @@ async function fetchAccountMetrics(accountId, range, from, to) {
         reach: parseInt(c.reach || 0),
         impressions: parseInt(c.impressions || 0),
         ctr: parseFloat(c.ctr || 0),
+        ig_follows: extractAction(c.actions, "follow"),
       };
     })
     .sort((a, b) => b.spend - a.spend)
@@ -176,16 +199,70 @@ async function fetchAccountMetrics(accountId, range, from, to) {
 
   return {
     currency: accInfo.currency || "ARS",
-    account: { spend, conversations: conv, cost_per_msg: extractCPM(ins.cost_per_action_type, conv, spend), reach: parseInt(ins.reach||0), impressions: parseInt(ins.impressions||0), ctr: parseFloat(ins.ctr||0), clicks: parseInt(ins.clicks||0) },
+    account: {
+      spend, conversations: conv,
+      cost_per_msg: extractCPM(ins.cost_per_action_type, conv, spend),
+      reach: parseInt(ins.reach||0),
+      impressions: parseInt(ins.impressions||0),
+      ctr: parseFloat(ins.ctr||0),
+      clicks: parseInt(ins.clicks||0),
+      ig_follows: igFollowersDelta,
+      ig_profile_visits: Math.round(igProfileVisits),
+    },
     prev_cost_per_msg: extractCPM(prevIns.cost_per_action_type, prevConv, prevSpend),
     campaigns,
   };
 }
 
-/* Creativos de campaña con thumbnail */
+/* ------------------------------------------------------------------ */
+/*  Audiencia de campaña (4 breakdowns en paralelo)                    */
+/* ------------------------------------------------------------------ */
+async function fetchCampaignAudience(campaignId, range, from, to) {
+  const rp = rangeToParams(range, from, to);
+  const BASE = { fields: "spend,impressions,reach,actions", level: "campaign", ...rp, limit: "50" };
+
+  const [genderRes, ageRes, platformRes, regionRes] = await Promise.allSettled([
+    fbGet(`${campaignId}/insights`, { ...BASE, breakdowns: "gender" }),
+    fbGet(`${campaignId}/insights`, { ...BASE, breakdowns: "age" }),
+    fbGet(`${campaignId}/insights`, { ...BASE, breakdowns: "publisher_platform" }),
+    fbGet(`${campaignId}/insights`, { ...BASE, breakdowns: "region" }),
+  ]);
+
+  function toRows(settled) {
+    if (settled.status !== "fulfilled") return [];
+    return settled.value.data || [];
+  }
+
+  function toPct(rows, key) {
+    const total = rows.reduce((s, r) => s + parseFloat(r.impressions || 0), 0);
+    if (!total) return [];
+    return rows
+      .map(r => ({ label: r[key] || "Otro", pct: Math.round(parseFloat(r.impressions||0) / total * 100), reach: parseInt(r.reach||0), spend: parseFloat(r.spend||0) }))
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 8);
+  }
+
+  const genderRows = toRows(genderRes);
+  const ageRows = toRows(ageRes);
+  const platformRows = toRows(platformRes);
+  const regionRows = toRows(regionRes);
+
+  const translateGender = g => g === "female" ? "Mujeres" : g === "male" ? "Hombres" : "Otro";
+  const translatePlatform = p => ({ facebook: "Facebook", instagram: "Instagram", audience_network: "Audience Network", messenger: "Messenger" }[p] || p);
+
+  return {
+    gender: toPct(genderRows, "gender").map(r => ({ ...r, label: translateGender(r.label) })),
+    age: toPct(ageRows, "age"),
+    platform: toPct(platformRows, "publisher_platform").map(r => ({ ...r, label: translatePlatform(r.label) })),
+    region: toPct(regionRows, "region").slice(0, 6),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Creativos de campaña                                                */
+/* ------------------------------------------------------------------ */
 async function fetchCampaignAds(campaignId, range, from, to) {
   const rp = rangeToParams(range, from, to);
-
   const [adsRes, insRes] = await Promise.all([
     fbGet(`${campaignId}/ads`, { fields: "id,name,status,creative{id,object_type,thumbnail_url,image_url}", limit: "50" }),
     fbGet(`${campaignId}/insights`, { fields: "ad_id,spend,impressions,reach,clicks,ctr,actions,cost_per_action_type", level: "ad", ...rp, limit: "50" }),
@@ -201,18 +278,15 @@ async function fetchCampaignAds(campaignId, range, from, to) {
       const conv = extractConv(i.actions);
       const cr = ad.creative || {};
       return {
-        id: ad.id,
-        name: ad.name,
+        id: ad.id, name: ad.name,
         status: /ACTIVE/i.test(ad.status) ? "activa" : "pausada",
         format: detectFormat(cr.object_type || ""),
         thumbnail_url: cr.thumbnail_url || cr.image_url || null,
-        spend,
-        conversations: conv,
+        spend, conversations: conv,
         cost_per_msg: extractCPM(i.cost_per_action_type, conv, spend),
-        reach: parseInt(i.reach || 0),
-        impressions: parseInt(i.impressions || 0),
-        ctr: parseFloat(i.ctr || 0),
-        clicks: parseInt(i.clicks || 0),
+        reach: parseInt(i.reach||0), impressions: parseInt(i.impressions||0),
+        ctr: parseFloat(i.ctr||0), clicks: parseInt(i.clicks||0),
+        ig_follows: extractAction(i.actions, "follow"),
       };
     })
     .sort((a, b) => b.spend - a.spend)
@@ -221,7 +295,9 @@ async function fetchCampaignAds(campaignId, range, from, to) {
   return { ads };
 }
 
-/* Análisis IA */
+/* ------------------------------------------------------------------ */
+/*  Análisis IA                                                         */
+/* ------------------------------------------------------------------ */
 async function fetchAnalysis(name, phrase, payload) {
   const prompt = `Sos analista senior de Meta Ads en una agencia argentina. Analizá los datos de "${name}" (${phrase}).
 Datos: ${JSON.stringify(payload)}
@@ -248,7 +324,9 @@ Devolvé SOLO JSON, español rioplatense, con números concretos:
   }
 }
 
-/* Express */
+/* ------------------------------------------------------------------ */
+/*  Express                                                             */
+/* ------------------------------------------------------------------ */
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../client")));
@@ -290,6 +368,16 @@ app.get("/api/campaign/:id/ads", auth, async (req, res) => {
   if (cached) return res.json({ ...cached, fromCache: true });
   try { const data = await fetchCampaignAds(id, range, from, to); await cache.set(ck, data); res.json({ ...data, fromCache: false }); }
   catch(e) { res.status(503).json({ error: e.message }); }
+});
+
+app.get("/api/campaign/:id/audience", auth, async (req, res) => {
+  const { id } = req.params;
+  const { range="d7", from, to } = req.query;
+  const ck = `aud:${id}:${range==="custom"?`${from}:${to}`:range}`;
+  const cached = await cache.get(ck);
+  if (cached) return res.json({ ...cached, fromCache: true });
+  try { const data = await fetchCampaignAudience(id, range, from, to); await cache.set(ck, data); res.json({ ...data, fromCache: false }); }
+  catch(e) { console.error(`❌ audiencia ${id}:`, e.message); res.status(503).json({ error: e.message }); }
 });
 
 app.get("*", (_, res) => res.sendFile(path.join(__dirname, "../client/index.html")));

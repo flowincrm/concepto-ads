@@ -535,6 +535,48 @@ app.get("/api/account/:id/status", auth, async (req, res) => {
   } catch(e) { res.status(503).json({ error: e.message }); }
 });
 
+// Lista dinámica de cuentas desde Meta (cache 1 hora)
+app.get("/api/accounts", auth, async (req, res) => {
+  const ck = "global:accounts";
+  const cached = await cache.get(ck);
+  if (cached) return res.json(cached);
+
+  try {
+    let allAccounts = [];
+    let url = `${FB}/me/adaccounts?fields=account_id,name,currency,account_status,business_name&limit=100&access_token=${META_TOKEN}`;
+    let pages = 0;
+    
+    while (url && pages < 5) {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error.message);
+      
+      for (const acc of (data.data || [])) {
+        allAccounts.push({
+          id: acc.account_id,
+          name: acc.name || acc.business_name || "Sin nombre",
+          biz: acc.business_name || "",
+          cur: acc.currency || "ARS",
+          status: acc.account_status,
+        });
+      }
+      
+      url = data.paging?.next || null;
+      pages++;
+    }
+    
+    // Filtrar cuentas activas y con acceso (status 1 = activa)
+    const active = allAccounts.filter(a => a.status === 1);
+    
+    await cache.set(ck, active, 3600); // 1 hora
+    console.log(`📋 ${active.length} cuentas activas de ${allAccounts.length} totales`);
+    res.json(active);
+  } catch(e) {
+    console.error("❌ Error listando cuentas:", e.message);
+    res.status(503).json({ error: e.message });
+  }
+});
+
 app.get("*", (_, res) => res.sendFile(path.join(__dirname, "../client/index.html")));
 
 createServer(app).listen(PORT, () => console.log(`🚀 Puerto ${PORT} | ${redis?"Redis":"Memoria"} ${CACHE_TTL}s`));

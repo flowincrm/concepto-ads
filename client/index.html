@@ -541,35 +541,11 @@ function CampaignCard({ c, cur, range }) {
 
 /* ================================================================== */
 /* Pantalla principal unificada: buscador + tabla general */
-const ALL_ACCOUNTS = [
-  ["148254890","Piccini","ARS"],["249080421","Horizonte","ARS"],
-  ["2054205255379518","Pueblo Mio Nueva","ARS"],["27457958657139152","Flowin","ARS"],
-  ["2494653184289010","Equilibrio 2026","ARS"],["881818354230758","Elan Travel","ARS"],
-  ["2423263937942828","Grossvial 2021","ARS"],["613966532424320","Nico Mansilla","ARS"],
-  ["270071817338033","Soluciones Piscinas","ARS"],["2997907086965858","Aerosilla","ARS"],
-  ["300683204394771","Aqua Fast SF","ARS"],["295010658349521","Aquafast Alta Gracia","ARS"],
-  ["962433610899045","Cámara de Turismo","ARS"],["679501909305318","HartBar","ARS"],
-  ["298248388243469","Cormoran","ARS"],["421000975871223","NEW YORK","ARS"],
-  ["934796460662507","Di Rienzo","ARS"],["671127420449431","Keops","ARS"],
-  ["298671268742251","Mónaco","ARS"],["268555408746746","Biderbost 2024","ARS"],
-  ["668770170851927","Guapas Bar","ARS"],["1009674249916047","Pueblo Mio Rest.","ARS"],
-  ["2607934066011919","La Pulperia","ARS"],["1393004314830939","Actitud Prado","ARS"],
-  ["1356475531568887","Euge CP 2023","ARS"],["607168158088957","Proyectar","ARS"],
-  ["231514086625158","Host Coworking","ARS"],["908140167640188","Simeoni","ARS"],
-  ["924467905838224","Carla Art Studio","ARS"],["286226457818437","Graficus ADS","ARS"],
-  ["1692451318198396","Rancho Norte","ARS"],["494756873078964","saint tropez","ARS"],
-  ["1308458966986728","COBICO","ARS"],["1051546939997605","VECAT","ARS"],
-  ["8691014401003127","Autogestarse","ARS"],["986896830233150","Todo Verde","ARS"],
-  ["685840817164309","Valik","ARS"],["1397424915044370","Panda Market","ARS"],
-  ["1387524565925014","Wine Group","ARS"],["2610298359318699","Qirubber","ARS"],
-  ["1479515210069384","Fullmart OK","ARS"],["760147720302294","Raíz Tienda Saludable","ARS"],
-  ["1484075675926924","Zibianca","ARS"],["1835303394005753","Casa de Blanco","ARS"],
-  ["1345033460089754","hotelkinvcp","ARS"],["842054995483033","Nacqua","ARS"],
-  ["642177252260758","MGSO","ARS"],
-].map(([id,name,cur]) => ({id,name,cur}));
+const ALL_ACCOUNTS_FALLBACK = []; // se carga dinámicamente desde el servidor
 
 function Home({ onOpen }) {
   const [q, setQ] = useState("");
+  const [accounts, setAccounts] = useState([]);
   const [metrics, setMetrics] = useState({});
   const [settings, setSettings] = useState({}); // { accountId: { budget, targetCPM, targetCPC, taskDone, taskWeek } }
   const [loading, setLoading] = useState(false);
@@ -586,8 +562,9 @@ function Home({ onOpen }) {
     return `${d.getFullYear()}-W${String(wk).padStart(2,"0")}`;
   })();
 
-  // Cargar settings del servidor al iniciar
+  // Cargar cuentas y settings del servidor al iniciar
   useEffect(() => {
+    apiFetch("/api/accounts").then(accs => { if (accs && accs.length) setAccounts(accs); }).catch(() => {});
     apiFetch("/api/settings").then(s => setSettings(s || {})).catch(() => {});
   }, []);
 
@@ -612,7 +589,7 @@ function Home({ onOpen }) {
     try {
       const data = await apiFetch("/api/overview", {
         method: "POST",
-        body: JSON.stringify({ accounts: ALL_ACCOUNTS.map(a=>a.id), range: "d7" }),
+        body: JSON.stringify({ accounts: accounts.map(a=>a.id), range: "d7" }),
       });
       setMetrics(data);
     } catch(e) { console.error("Overview error:", e); }
@@ -624,7 +601,7 @@ function Home({ onOpen }) {
   // Filtrar por búsqueda, fijadas primero
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    let rows = s ? ALL_ACCOUNTS.filter(a => a.name.toLowerCase().includes(s) || a.id.includes(s)) : ALL_ACCOUNTS;
+    let rows = s ? accounts.filter(a => a.name.toLowerCase().includes(s) || a.id.includes(s)) : accounts;
     return [...rows].sort((a,b) => {
       const pa = pinned.includes(a.id) ? 0 : 1, pb = pinned.includes(b.id) ? 0 : 1;
       if (pa !== pb) return pa - pb;
@@ -660,9 +637,9 @@ function Home({ onOpen }) {
   const cpcColor = (id, val) => { const t = getTargetCPC(id); if (t && val > t) return D.red; return D.text; };
   const calcCPC = (acc) => toNum(acc.clicks) > 0 ? toNum(acc.spend) / toNum(acc.clicks) : 0;
 
-  const TH = { padding: "8px 12px", fontSize: 10, fontWeight: 700, color: D.faint, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${D.line}`, whiteSpace: "nowrap", background: D.surface, textAlign: "right" };
+  const TH = { padding: "6px 8px", fontSize: 9.5, fontWeight: 700, color: D.faint, textTransform: "uppercase", letterSpacing: 0.3, borderBottom: `1px solid ${D.line}`, whiteSpace: "nowrap", background: D.surface, textAlign: "right" };
   const TH_L = { ...TH, textAlign: "left" };
-  const TD = { padding: "9px 12px", fontSize: 12.5, color: D.text, borderBottom: `1px solid ${D.lineSoft}`, whiteSpace: "nowrap", textAlign: "right" };
+  const TD = { padding: "7px 8px", fontSize: 12, color: D.text, borderBottom: `1px solid ${D.lineSoft}`, whiteSpace: "nowrap", textAlign: "right" };
   const TD_L = { ...TD, textAlign: "left" };
 
   return h("div", null,
@@ -688,12 +665,12 @@ function Home({ onOpen }) {
 
     /* Tabla */
     h("div", { style: { overflowX: "auto", borderRadius: 12, border: `1px solid ${D.line}` } },
-      h("table", { style: { width: "100%", borderCollapse: "collapse" } },
+      h("table", { style: { width: "100%", borderCollapse: "collapse", tableLayout: "auto" } },
         h("thead", null,
           h("tr", null,
-            h("th", { style: { ...TH_L, position: "sticky", left: 0, zIndex: 2, minWidth: 48 } }, ""),
-            h("th", { style: { ...TH_L, position: "sticky", left: 48, zIndex: 2, minWidth: 150 } }, "Cliente"),
-            h("th", { style: TH }, "Estado"),
+            h("th", { style: { ...TH_L, position: "sticky", left: 0, zIndex: 2, minWidth: 36, padding: "6px 4px" } }, ""),
+            h("th", { style: { ...TH_L, position: "sticky", left: 36, zIndex: 2, minWidth: 120 } }, "Cliente"),
+            h("th", { style: { ...TH, textAlign: "center" } }, "Estado"),
             h("th", { style: TH }, "Gasto 7d"),
             h("th", { style: TH }, "Presupuesto"),
             h("th", { style: TH }, "% Ejec."),
@@ -726,11 +703,11 @@ function Home({ onOpen }) {
               onMouseLeave: e => e.currentTarget.style.background = rowBg,
             },
               /* Pin */
-              h("td", { style: { ...TD_L, position: "sticky", left: 0, background: rowBg, zIndex: 1, padding: "9px 8px" }, onClick: e => { e.stopPropagation(); togglePin(a.id); } },
+              h("td", { style: { ...TD_L, position: "sticky", left: 0, background: rowBg, zIndex: 1, padding: "7px 4px" }, onClick: e => { e.stopPropagation(); togglePin(a.id); } },
                 h("span", { style: { color: isPinned ? D.orange : D.lineSoft, cursor: "pointer", fontSize: 14 } }, "★"),
               ),
               /* Nombre */
-              h("td", { style: { ...TD_L, fontWeight: 700, position: "sticky", left: 48, background: rowBg, zIndex: 1 }, onClick: () => onOpen(a.id) }, a.name),
+              h("td", { style: { ...TD_L, fontWeight: 700, position: "sticky", left: 36, background: rowBg, zIndex: 1 }, onClick: () => onOpen(a.id) }, a.name),
               /* Estado */
               h("td", { style: { ...TD }, onClick: () => onOpen(a.id) },
                 m
@@ -743,7 +720,7 @@ function Home({ onOpen }) {
               h("td", { style: TD, onClick: e => e.stopPropagation() },
                 editBudget === a.id
                   ? h("input", { autoFocus: true, type: "number", value: budgetInput, placeholder: "0", onChange: e => setBudgetInput(e.target.value), onBlur: () => { saveBudget(a.id, budgetInput); setEditBudget(null); }, onKeyDown: e => { if (e.key==="Enter") { saveBudget(a.id, budgetInput); setEditBudget(null); } }, style: { width: 80, background: D.bg, border: `1px solid ${D.orange}`, borderRadius: 6, color: D.text, fontSize: 12, padding: "3px 6px", outline: "none", textAlign: "right" } })
-                  : h("button", { onClick: () => { setEditBudget(a.id); setBudgetInput(getSetting(a.id,"budget")||""); }, style: { background: "none", border: `1px dashed ${D.line}`, borderRadius: 6, color: getSetting(a.id,"budget") ? D.dim : D.lineSoft, fontSize: 11.5, fontWeight: 600, padding: "2px 8px", cursor: "pointer" } }, getSetting(a.id,"budget") ? heroMoney(getSetting(a.id,"budget"), a.cur) : "+ agregar"),
+                  : h("button", { onClick: () => { setEditBudget(a.id); setBudgetInput(getSetting(a.id,"budget")||""); }, style: { background: "none", border: `1px dashed ${D.line}`, borderRadius: 6, color: getSetting(a.id,"budget") ? D.dim : D.lineSoft, fontSize: 11, fontWeight: 600, padding: "1px 6px", cursor: "pointer" } }, getSetting(a.id,"budget") ? heroMoney(getSetting(a.id,"budget"), a.cur) : "+ agregar"),
               ),
               /* % ejecutado */
               h("td", { style: { ...TD, fontWeight: 700, color: pctColor(pctExec) }, onClick: () => onOpen(a.id) },
@@ -756,17 +733,26 @@ function Home({ onOpen }) {
               h("td", { style: { ...TD, color: toNum(acc.ctr) >= 1 ? D.green : D.text, fontWeight: toNum(acc.ctr) >= 1 ? 700 : 400 }, onClick: () => onOpen(a.id) }, m ? pct(acc.ctr) : "—"),
               h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.reach) : "—"),
               h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.impressions) : "—"),
-              /* Tarea semanal */
-              h("td", { style: { ...TD, textAlign: "center", padding: "9px 8px" }, onClick: e => {
-                e.stopPropagation();
-                const isDone = getSetting(a.id, "taskWeek") === currentWeek && getSetting(a.id, "taskDone");
-                if (isDone) { updateSetting(a.id, "taskDone", false); }
-                else { updateSetting(a.id, "taskDone", true); updateSetting(a.id, "taskWeek", currentWeek); }
-              }},
-                getSetting(a.id, "taskWeek") === currentWeek && getSetting(a.id, "taskDone")
-                  ? h("span", { style: { fontSize: 16 } }, "✅")
-                  : h("span", { style: { fontSize: 13, color: D.lineSoft, cursor: "pointer" } }, "○"),
-              ),
+              /* Tarea semanal — 3 estados: ○ → 🟡 → ✅ → ○ */
+              (() => {
+                const tw = getSetting(a.id, "taskWeek");
+                const ts = tw === currentWeek ? (getSetting(a.id, "taskStatus") || "none") : "none";
+                const nextStatus = { none: "pending", pending: "done", done: "none" };
+                return h("td", {
+                  style: { ...TD, textAlign: "center", padding: "9px 8px", cursor: "pointer", userSelect: "none" },
+                  onClick: e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const next = nextStatus[ts] || "pending";
+                    updateSetting(a.id, "taskStatus", next);
+                    updateSetting(a.id, "taskWeek", currentWeek);
+                  },
+                },
+                  ts === "done" ? h("span", { style: { fontSize: 15 } }, "✅")
+                  : ts === "pending" ? h("span", { style: { fontSize: 15 } }, "🟡")
+                  : h("span", { style: { fontSize: 14, color: D.lineSoft } }, "○"),
+                );
+              })(),
               extraCols && h("td", { style: { ...TD, color: "#C13584" }, onClick: () => onOpen(a.id) }, m && toNum(acc.ig_follows)>0 ? heroNum(acc.ig_follows) : "—"),
               extraCols && h("td", { style: { ...TD, color: "#C13584" }, onClick: () => onOpen(a.id) }, m && toNum(acc.ig_profile_visits)>0 ? heroNum(acc.ig_profile_visits) : "—"),
             );
@@ -1050,9 +1036,13 @@ function App() {
   const [authed, setAuthed] = useState(!!(CONFIG.serverUrl && CONFIG.secret));
   const [view, setView] = useState({ name: "home" });
   const [range, setRange] = useState({ key: "d7" });
-  // pinned se maneja dentro de Home
+  const [appAccounts, setAppAccounts] = useState([]);
 
-  const account = view.name === "detail" ? ACCOUNTS.find(a => a.id === view.id) : null;
+  useEffect(() => {
+    apiFetch("/api/accounts").then(accs => { if (accs && accs.length) setAppAccounts(accs); }).catch(() => {});
+  }, []);
+
+  const account = view.name === "detail" ? appAccounts.find(a => a.id === view.id) : null;
 
   if (!authed) return h(Login, { onLogin: () => setAuthed(true) });
 

@@ -540,9 +540,8 @@ function CampaignCard({ c, cur, range }) {
 
 
 /* ================================================================== */
-/* Vista General — tabla de todas las cuentas                          */
-/* ================================================================== */
-const OVERVIEW_ACCOUNTS = [
+/* Pantalla principal unificada: buscador + tabla general */
+const ALL_ACCOUNTS = [
   ["148254890","Piccini","ARS"],["249080421","Horizonte","ARS"],
   ["2054205255379518","Pueblo Mio Nueva","ARS"],["27457958657139152","Flowin","ARS"],
   ["2494653184289010","Equilibrio 2026","ARS"],["881818354230758","Elan Travel","ARS"],
@@ -558,26 +557,26 @@ const OVERVIEW_ACCOUNTS = [
   ["1356475531568887","Euge CP 2023","ARS"],["607168158088957","Proyectar","ARS"],
   ["231514086625158","Host Coworking","ARS"],["908140167640188","Simeoni","ARS"],
   ["924467905838224","Carla Art Studio","ARS"],["286226457818437","Graficus ADS","ARS"],
+  ["1692451318198396","Rancho Norte","ARS"],["494756873078964","saint tropez","ARS"],
+  ["1308458966986728","COBICO","ARS"],["1051546939997605","VECAT","ARS"],
+  ["8691014401003127","Autogestarse","ARS"],["986896830233150","Todo Verde","ARS"],
+  ["685840817164309","Valik","ARS"],["1397424915044370","Panda Market","ARS"],
+  ["1387524565925014","Wine Group","ARS"],["2610298359318699","Qirubber","ARS"],
+  ["1479515210069384","Fullmart OK","ARS"],["760147720302294","Raíz Tienda Saludable","ARS"],
+  ["1484075675926924","Zibianca","ARS"],["1835303394005753","Casa de Blanco","ARS"],
+  ["1345033460089754","hotelkinvcp","ARS"],["842054995483033","Nacqua","ARS"],
+  ["642177252260758","MGSO","ARS"],
 ].map(([id,name,cur]) => ({id,name,cur}));
 
-function Overview({ onOpen }) {
-  const [selected, setSelected] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("ov_selected") || "null") || OVERVIEW_ACCOUNTS.map(a=>a.id); }
-    catch { return OVERVIEW_ACCOUNTS.map(a=>a.id); }
-  });
+function Home({ onOpen }) {
+  const [q, setQ] = useState("");
   const [metrics, setMetrics] = useState({});
-  const [budgets, setBudgets] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("ov_budgets") || "{}"); }
-    catch { return {}; }
-  });
+  const [budgets, setBudgets] = useState(() => { try { return JSON.parse(localStorage.getItem("ov_budgets")||"{}"); } catch { return {}; } });
   const [loading, setLoading] = useState(false);
-  const [showCols, setShowCols] = useState(false);
   const [extraCols, setExtraCols] = useState(false);
   const [editBudget, setEditBudget] = useState(null);
   const [budgetInput, setBudgetInput] = useState("");
-  const [range] = useState({ key: "d7" });
-
-  const activeAccounts = OVERVIEW_ACCOUNTS.filter(a => selected.includes(a.id));
+  const [pinned, setPinned] = useState(() => { try { return JSON.parse(localStorage.getItem("cc_pinned")||"[]"); } catch { return []; } });
 
   const saveBudget = (id, val) => {
     const nb = { ...budgets, [id]: val === "" ? null : +val };
@@ -585,22 +584,42 @@ function Overview({ onOpen }) {
     localStorage.setItem("ov_budgets", JSON.stringify(nb));
   };
 
+  const togglePin = (id) => {
+    const nx = pinned.includes(id) ? pinned.filter(x=>x!==id) : [...pinned, id];
+    setPinned(nx);
+    localStorage.setItem("cc_pinned", JSON.stringify(nx));
+  };
+
   const loadAll = async () => {
     setLoading(true);
     try {
       const data = await apiFetch("/api/overview", {
         method: "POST",
-        body: JSON.stringify({ accounts: activeAccounts.map(a=>a.id), range: range.key }),
+        body: JSON.stringify({ accounts: ALL_ACCOUNTS.map(a=>a.id), range: "d7" }),
       });
       setMetrics(data);
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error("Overview error:", e); }
     setLoading(false);
   };
 
-  useEffect(() => { loadAll(); }, [selected.length]);
+  useEffect(() => { loadAll(); }, []);
+
+  // Filtrar por búsqueda, fijadas primero
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    let rows = s ? ALL_ACCOUNTS.filter(a => a.name.toLowerCase().includes(s) || a.id.includes(s)) : ALL_ACCOUNTS;
+    return [...rows].sort((a,b) => {
+      const pa = pinned.includes(a.id) ? 0 : 1, pb = pinned.includes(b.id) ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      // Ordenar por gasto descendente
+      const sa = parseFloat(metrics[a.id]?.account?.spend||0);
+      const sb = parseFloat(metrics[b.id]?.account?.spend||0);
+      return sb - sa;
+    });
+  }, [q, metrics, pinned]);
 
   const statusInfo = (m) => {
-    if (!m || m.error) return { color: D.faint, bg: D.lineSoft, label: "Error" };
+    if (!m || m.error) return { color: D.faint, bg: D.lineSoft, label: "Sin datos" };
     if (toNum(m.account?.spend) > 0) return { color: D.green, bg: D.greenSoft, label: "Activa" };
     return { color: D.amber, bg: D.amberSoft, label: "Sin actividad" };
   };
@@ -617,115 +636,112 @@ function Overview({ onOpen }) {
     return D.green;
   };
 
-  const toggleAccount = (id) => {
-    const nx = selected.includes(id) ? selected.filter(x=>x!==id) : [...selected, id];
-    setSelected(nx);
-    localStorage.setItem("ov_selected", JSON.stringify(nx));
-  };
-
-  const COL_STYLE = { padding: "10px 12px", fontSize: 12.5, color: D.text, borderBottom: `1px solid ${D.lineSoft}`, whiteSpace: "nowrap" };
-  const TH_STYLE = { padding: "8px 12px", fontSize: 10, fontWeight: 700, color: D.faint, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${D.line}`, whiteSpace: "nowrap", background: D.surface };
+  const TH = { padding: "8px 12px", fontSize: 10, fontWeight: 700, color: D.faint, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${D.line}`, whiteSpace: "nowrap", background: D.surface, textAlign: "right" };
+  const TH_L = { ...TH, textAlign: "left" };
+  const TD = { padding: "9px 12px", fontSize: 12.5, color: D.text, borderBottom: `1px solid ${D.lineSoft}`, whiteSpace: "nowrap", textAlign: "right" };
+  const TD_L = { ...TD, textAlign: "left" };
 
   return h("div", null,
-    /* Header de la vista general */
-    h("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" } },
-      h("div", { style: { flex: 1 } },
-        h("div", { style: { fontSize: 14, fontWeight: 800, color: D.text } }, "Vista General de Cuentas"),
-        h("div", { style: { fontSize: 11.5, color: D.faint } }, `${activeAccounts.length} cuentas · últimos 7 días`),
-      ),
-      h("button", { onClick: () => setShowCols(v=>!v), style: { fontSize: 11.5, fontWeight: 700, padding: "6px 12px", borderRadius: 8, border: `1px solid ${D.line}`, background: D.card, color: D.dim, cursor: "pointer" } }, "⚙ Cuentas"),
-      h("button", { onClick: () => setExtraCols(v=>!v), style: { fontSize: 11.5, fontWeight: 700, padding: "6px 12px", borderRadius: 8, border: `1px solid ${D.line}`, background: extraCols ? D.orange : D.card, color: extraCols ? "#fff" : D.dim, cursor: "pointer" } }, extraCols ? "Menos columnas" : "Más columnas"),
-      h("button", { onClick: loadAll, disabled: loading, style: { fontSize: 11.5, fontWeight: 700, padding: "6px 12px", borderRadius: 8, border: `1px solid ${D.line}`, background: D.card, color: D.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, opacity: loading ? 0.6 : 1 } },
-        loading ? h("span", { className: "spin" }, icon("Loader2", 13)) : icon("RefreshCw", 13), loading ? "Actualizando…" : "Actualizar",
-      ),
+    /* Buscador */
+    h("div", { style: { display: "flex", alignItems: "center", gap: 8, background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: "0 12px", marginBottom: 14 } },
+      icon("Search", 16, D.faint),
+      h("input", { value: q, onChange: e => setQ(e.target.value), placeholder: "Buscar cliente por nombre…", style: { border: "none", outline: "none", background: "transparent", color: D.text, fontSize: 14, padding: "12px 0", width: "100%", fontFamily: "inherit" } }),
+      q && h("button", { onClick: () => setQ(""), style: { background: "none", border: "none", color: D.faint, cursor: "pointer" } }, icon("X", 14, D.faint)),
     ),
 
-    /* Selector de cuentas */
-    showCols && h("div", { style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: 12, marginBottom: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 6 } },
-      ...OVERVIEW_ACCOUNTS.map(a =>
-        h("label", { key: a.id, style: { display: "flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 12, color: selected.includes(a.id) ? D.text : D.faint } },
-          h("input", { type: "checkbox", checked: selected.includes(a.id), onChange: () => toggleAccount(a.id), style: { accentColor: D.orange } }),
-          a.name,
-        )
+    /* Controles de tabla */
+    h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" } },
+      h("div", { style: { fontSize: 11.5, color: D.faint } }, `${filtered.length} cuentas · últimos 7 días`),
+      h("div", { style: { marginLeft: "auto", display: "flex", gap: 6 } },
+        h("button", { onClick: () => setExtraCols(v=>!v), style: { fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 8, border: `1px solid ${D.line}`, background: extraCols ? D.orangeSoft : D.card, color: extraCols ? D.orange : D.dim, cursor: "pointer" } },
+          extraCols ? "− Menos columnas" : "+ Más columnas"
+        ),
+        h("button", { onClick: loadAll, disabled: loading, style: { fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 8, border: `1px solid ${D.line}`, background: D.card, color: D.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, opacity: loading ? 0.6 : 1 } },
+          loading ? h("span", { className: "spin" }, icon("Loader2", 13, D.faint)) : icon("RefreshCw", 13), loading ? "Actualizando…" : "Actualizar"
+        ),
       ),
     ),
 
     /* Tabla */
     h("div", { style: { overflowX: "auto", borderRadius: 12, border: `1px solid ${D.line}` } },
-      h("table", { style: { width: "100%", borderCollapse: "collapse", minWidth: 700 } },
+      h("table", { style: { width: "100%", borderCollapse: "collapse" } },
         h("thead", null,
           h("tr", null,
-            h("th", { style: { ...TH_STYLE, textAlign: "left", minWidth: 140, position: "sticky", left: 0, zIndex: 1 } }, "Cliente"),
-            h("th", { style: TH_STYLE }, "Estado"),
-            h("th", { style: TH_STYLE }, "Gasto"),
-            h("th", { style: TH_STYLE }, "Presupuesto"),
-            h("th", { style: TH_STYLE }, "% Ejec."),
-            h("th", { style: TH_STYLE }, "Conversac."),
-            h("th", { style: TH_STYLE }, "Costo/msj"),
-            h("th", { style: TH_STYLE }, "CTR"),
-            extraCols && h("th", { style: TH_STYLE }, "Alcance"),
-            extraCols && h("th", { style: TH_STYLE }, "Impresiones"),
-            extraCols && h("th", { style: TH_STYLE }, "Seg. IG"),
-            extraCols && h("th", { style: TH_STYLE }, "Visitas IG"),
+            h("th", { style: { ...TH_L, position: "sticky", left: 0, zIndex: 2, minWidth: 48 } }, ""),
+            h("th", { style: { ...TH_L, position: "sticky", left: 48, zIndex: 2, minWidth: 150 } }, "Cliente"),
+            h("th", { style: TH }, "Estado"),
+            h("th", { style: TH }, "Gasto 7d"),
+            h("th", { style: TH }, "Presupuesto"),
+            h("th", { style: TH }, "% Ejec."),
+            h("th", { style: TH }, "Conversac."),
+            h("th", { style: TH }, "Costo/msj"),
+            h("th", { style: TH }, "CTR"),
+            extraCols && h("th", { style: TH }, "Alcance"),
+            extraCols && h("th", { style: TH }, "Impresiones"),
+            extraCols && h("th", { style: TH }, "Seg. IG"),
+            extraCols && h("th", { style: TH }, "Visitas IG"),
           ),
         ),
         h("tbody", null,
-          ...activeAccounts.map((a, idx) => {
+          ...filtered.map((a, idx) => {
             const m = metrics[a.id];
             const acc = m?.account || {};
             const st = statusInfo(m);
             const budget = budgets[a.id];
             const pct = pctBudget(acc.spend, budget);
+            const isPinned = pinned.includes(a.id);
             const isEven = idx % 2 === 0;
+            const rowBg = isEven ? D.surface : D.card;
 
             return h("tr", {
               key: a.id,
-              onClick: () => onOpen(a.id),
-              style: { cursor: "pointer", background: isEven ? D.surface : D.card, transition: "background 0.15s" },
+              style: { cursor: "pointer", background: rowBg },
               onMouseEnter: e => e.currentTarget.style.background = D.cardHi,
-              onMouseLeave: e => e.currentTarget.style.background = isEven ? D.surface : D.card,
+              onMouseLeave: e => e.currentTarget.style.background = rowBg,
             },
+              /* Pin */
+              h("td", { style: { ...TD_L, position: "sticky", left: 0, background: rowBg, zIndex: 1, padding: "9px 8px" }, onClick: e => { e.stopPropagation(); togglePin(a.id); } },
+                h("span", { style: { color: isPinned ? D.orange : D.lineSoft, cursor: "pointer", fontSize: 14 } }, "★"),
+              ),
               /* Nombre */
-              h("td", { style: { ...COL_STYLE, fontWeight: 700, position: "sticky", left: 0, background: isEven ? D.surface : D.card, zIndex: 1 } }, a.name),
+              h("td", { style: { ...TD_L, fontWeight: 700, position: "sticky", left: 48, background: rowBg, zIndex: 1 }, onClick: () => onOpen(a.id) }, a.name),
               /* Estado */
-              h("td", { style: { ...COL_STYLE, textAlign: "center" } },
-                m ? h("span", { style: { fontSize: 10.5, fontWeight: 700, color: st.color, background: st.bg, padding: "2px 8px", borderRadius: 10 } }, st.label)
-                  : h("span", { className: "spin", style: { display: "inline-block" } }, icon("Loader2", 12, D.faint)),
+              h("td", { style: { ...TD }, onClick: () => onOpen(a.id) },
+                m
+                  ? h("span", { style: { fontSize: 10.5, fontWeight: 700, color: st.color, background: st.bg, padding: "2px 8px", borderRadius: 10 } }, st.label)
+                  : h("span", { className: "spin", style: { display: "inline-block" } }, icon("Loader2", 11, D.faint)),
               ),
               /* Gasto */
-              h("td", { style: { ...COL_STYLE, color: D.orange, fontWeight: 700 } }, m ? heroMoney(acc.spend, a.cur) : "—"),
+              h("td", { style: { ...TD, color: D.orange, fontWeight: 700 }, onClick: () => onOpen(a.id) }, m ? heroMoney(acc.spend, a.cur) : "—"),
               /* Presupuesto editable */
-              h("td", { style: { ...COL_STYLE }, onClick: e => e.stopPropagation() },
+              h("td", { style: TD, onClick: e => e.stopPropagation() },
                 editBudget === a.id
-                  ? h("input", { autoFocus: true, type: "number", value: budgetInput, placeholder: "0", onChange: e => setBudgetInput(e.target.value), onBlur: () => { saveBudget(a.id, budgetInput); setEditBudget(null); }, onKeyDown: e => { if (e.key === "Enter") { saveBudget(a.id, budgetInput); setEditBudget(null); } }, style: { width: 80, background: D.bg, border: `1px solid ${D.orange}`, borderRadius: 6, color: D.text, fontSize: 12, padding: "3px 6px", outline: "none" } })
-                  : h("button", { onClick: () => { setEditBudget(a.id); setBudgetInput(budget || ""); }, style: { background: "none", border: `1px dashed ${D.line}`, borderRadius: 6, color: budget ? D.text : D.faint, fontSize: 12, fontWeight: 600, padding: "3px 8px", cursor: "pointer" } }, budget ? heroMoney(budget, a.cur) : "+ agregar"),
+                  ? h("input", { autoFocus: true, type: "number", value: budgetInput, placeholder: "0", onChange: e => setBudgetInput(e.target.value), onBlur: () => { saveBudget(a.id, budgetInput); setEditBudget(null); }, onKeyDown: e => { if (e.key==="Enter") { saveBudget(a.id, budgetInput); setEditBudget(null); } }, style: { width: 80, background: D.bg, border: `1px solid ${D.orange}`, borderRadius: 6, color: D.text, fontSize: 12, padding: "3px 6px", outline: "none", textAlign: "right" } })
+                  : h("button", { onClick: () => { setEditBudget(a.id); setBudgetInput(budget||""); }, style: { background: "none", border: `1px dashed ${D.line}`, borderRadius: 6, color: budget ? D.dim : D.lineSoft, fontSize: 11.5, fontWeight: 600, padding: "2px 8px", cursor: "pointer" } }, budget ? heroMoney(budget, a.cur) : "+ agregar"),
               ),
               /* % ejecutado */
-              h("td", { style: { ...COL_STYLE, fontWeight: 700, color: pctColor(pct) } },
-                pct != null ? h("span", null, `${pct}%`, pct > 100 && h("span", { style: { marginLeft: 4 } }, "⚠️")) : "—"
+              h("td", { style: { ...TD, fontWeight: 700, color: pctColor(pct) }, onClick: () => onOpen(a.id) },
+                pct != null ? `${pct}%${pct > 100 ? " ⚠" : ""}` : "—"
               ),
-              /* Conversaciones */
-              h("td", { style: COL_STYLE }, m ? heroNum(acc.conversations) : "—"),
-              /* Costo/msj */
-              h("td", { style: { ...COL_STYLE, color: acc.cost_per_msg ? D.text : D.faint } }, m ? heroCost(acc.cost_per_msg, a.cur) : "—"),
-              /* CTR */
-              h("td", { style: { ...COL_STYLE, color: toNum(acc.ctr) >= 1 ? D.green : D.text } }, m ? pct(acc.ctr) : "—"),
-              /* Columnas extras */
-              extraCols && h("td", { style: COL_STYLE }, m ? heroNum(acc.reach) : "—"),
-              extraCols && h("td", { style: COL_STYLE }, m ? heroNum(acc.impressions) : "—"),
-              extraCols && h("td", { style: { ...COL_STYLE, color: "#C13584" } }, m && toNum(acc.ig_follows) > 0 ? heroNum(acc.ig_follows) : "—"),
-              extraCols && h("td", { style: { ...COL_STYLE, color: "#C13584" } }, m && toNum(acc.ig_profile_visits) > 0 ? heroNum(acc.ig_profile_visits) : "—"),
+              /* Métricas */
+              h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.conversations) : "—"),
+              h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroCost(acc.cost_per_msg, a.cur) : "—"),
+              h("td", { style: { ...TD, color: toNum(acc.ctr) >= 1 ? D.green : D.text, fontWeight: toNum(acc.ctr) >= 1 ? 700 : 400 }, onClick: () => onOpen(a.id) }, m ? pct(acc.ctr) : "—"),
+              /* Extra */
+              extraCols && h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.reach) : "—"),
+              extraCols && h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.impressions) : "—"),
+              extraCols && h("td", { style: { ...TD, color: "#C13584" }, onClick: () => onOpen(a.id) }, m && toNum(acc.ig_follows)>0 ? heroNum(acc.ig_follows) : "—"),
+              extraCols && h("td", { style: { ...TD, color: "#C13584" }, onClick: () => onOpen(a.id) }, m && toNum(acc.ig_profile_visits)>0 ? heroNum(acc.ig_profile_visits) : "—"),
             );
           }),
         ),
       ),
     ),
-    h("div", { style: { fontSize: 11, color: D.faint, marginTop: 10, textAlign: "center" } }, "Hacé clic en una fila para ver el detalle de la cuenta"),
+    h("div", { style: { fontSize: 11, color: D.faint, marginTop: 8, textAlign: "center" } }, "Hacé clic en una fila para ver el detalle · ★ para fijar arriba"),
   );
 }
 
-/* Home */
-function Home({ pinned, onPin, onOpen }) {
+
   const [q, setQ] = useState("");
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -738,40 +754,7 @@ function Home({ pinned, onPin, onOpen }) {
     return r.slice(0, 10);
   }, [q, pinned]);
 
-  return h("div", null,
-    h("div", { style: { display: "flex", alignItems: "center", gap: 8, background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: "0 12px", marginBottom: 14 } },
-      icon("Search", 16, D.faint),
-      h("input", {
-        value: q, onChange: e => setQ(e.target.value), autoFocus: true,
-        placeholder: "Buscar cliente por nombre o negocio…",
-        style: { border: "none", outline: "none", background: "transparent", color: D.text, fontSize: 14, padding: "12px 0", width: "100%", fontFamily: "inherit" },
-      }),
-    ),
-    h("div", { style: { fontSize: 11, color: D.faint, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 } },
-      q ? `${rows.length} resultado${rows.length === 1 ? "" : "s"}` : "Clientes fijados y frecuentes"
-    ),
-    h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
-      ...rows.map(a => {
-        const on = pinned.includes(a.id);
-        return h("div", {
-          key: a.id, onClick: () => onOpen(a.id),
-          style: { display: "flex", alignItems: "center", gap: 12, background: D.card, border: `1px solid ${on ? D.orange : D.line}`, borderRadius: 12, padding: "13px 14px", cursor: "pointer" },
-        },
-          h("button", {
-            onClick: e => { e.stopPropagation(); onPin(a.id); },
-            style: { background: "none", border: "none", cursor: "pointer", padding: 0, color: on ? D.orange : D.faint, flexShrink: 0 },
-          }, icon("Star", 17, on ? D.orange : D.faint)),
-          h("div", { style: { minWidth: 0, flex: 1 } },
-            h("div", { style: { fontSize: 14.5, fontWeight: 700, color: D.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, a.name),
-            h("div", { style: { fontSize: 11.5, color: D.faint, marginTop: 1 } }, a.biz || ""),
-          ),
-          icon("ChevronRight", 18, D.faint),
-        );
-      }),
-      rows.length === 0 && h("div", { style: { color: D.faint, fontSize: 13, textAlign: "center", padding: "30px 0" } }, "Sin coincidencias."),
-    ),
-  );
-}
+  
 
 /* RangeControl */
 function RangeControl({ range, setRange }) {
@@ -988,44 +971,7 @@ function Detail({ account, range, setRange }) {
         ),
       ),
 
-      /* Análisis IA */
-      h("div", { style: { marginTop: 16, background: D.card, border: `1px solid ${D.line}`, borderRadius: 14, padding: "14px 15px" } },
-        h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
-          icon("Sparkles", 15, D.orange),
-          h("span", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 } }, "RESUMEN IA"),
-          anState === "loading" && h("span", { className: "spin", style: { marginLeft: 4 } }, icon("Loader2", 13, D.faint)),
-        ),
-        anState === "loading" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "Analizando cuenta y campañas…"),
-        anState === "error" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "No se pudo generar el análisis. ", h("button", { onClick: () => run(true), style: { color: D.orange, background: "none", border: "none", cursor: "pointer", fontWeight: 700 } }, "Reintentar")),
-        anState === "done" && an && h("div", null,
-          an.veredicto && h("div", { style: { fontSize: 13.5, color: D.text, fontWeight: 600, marginBottom: 12, lineHeight: 1.5 } }, an.veredicto),
-          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 } },
-            h("div", { style: { background: D.greenSoft, borderRadius: 10, padding: "11px 13px" } },
-              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.green, marginBottom: 7, letterSpacing: 0.3 } }, "LO BUENO"),
-              ...(an.bueno || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.green } }, "+"), t)),
-            ),
-            h("div", { style: { background: D.redSoft, borderRadius: 10, padding: "11px 13px" } },
-              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.red, marginBottom: 7, letterSpacing: 0.3 } }, "A MEJORAR"),
-              ...(an.malo || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.red } }, "–"), t)),
-            ),
-          ),
-        ),
-      ),
-
-      /* Campañas */
-      h("div", { style: { marginTop: 16 } },
-        h("div", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3, marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
-          icon("BarChart3", 15, D.orange), " CAMPAÑAS ",
-          h("span", { style: { color: D.faint, fontWeight: 600 } }, `(${(data.campaigns||[]).length})`),
-          h("span", { style: { color: D.faint, fontWeight: 500, fontSize: 11, marginLeft: "auto" } }, "Tocá una campaña para ver sus anuncios"),
-        ),
-        h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
-          ...(data.campaigns || []).map((c, i) => h(CampaignCard, { key: c.id || i, c, cur, range })),
-          (!data.campaigns || data.campaigns.length === 0) && h("div", { style: { fontSize: 12.5, color: D.faint, padding: "10px 0" } }, "No se encontraron campañas con datos en este período."),
-        ),
-      ),
-
-      /* Alertas */
+/* Alertas */
       h("div", { style: { marginTop: 16, background: D.surface, border: `1px solid ${D.line}`, borderRadius: 14, padding: "14px 15px" } },
         h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" } },
           icon("AlertTriangle", 15, D.amber),
@@ -1070,15 +1016,7 @@ function App() {
   const [authed, setAuthed] = useState(!!(CONFIG.serverUrl && CONFIG.secret));
   const [view, setView] = useState({ name: "home" });
   const [range, setRange] = useState({ key: "d7" });
-  const [pinned, setPinned] = useState(() => JSON.parse(localStorage.getItem("cc_pinned") || "[]"));
-
-  const onPin = (id) => {
-    setPinned(prev => {
-      const nx = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
-      localStorage.setItem("cc_pinned", JSON.stringify(nx));
-      return nx;
-    });
-  };
+  // pinned se maneja dentro de Home
 
   const account = view.name === "detail" ? ACCOUNTS.find(a => a.id === view.id) : null;
 
@@ -1105,17 +1043,11 @@ function App() {
     ),
 
     /* Tabs nav — solo visible cuando no estás en detalle */
-    view.name !== "detail" && h("div", { style: { display: "flex", gap: 4, marginBottom: 16, background: D.card, border: `1px solid ${D.line}`, borderRadius: 10, padding: 3, width: "fit-content" } },
-      h("button", { onClick: () => setView({ name: "home" }), style: { padding: "6px 14px", fontSize: 12.5, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", background: view.name === "home" ? D.orange : "transparent", color: view.name === "home" ? "#fff" : D.dim } }, "Clientes"),
-      h("button", { onClick: () => setView({ name: "overview" }), style: { padding: "6px 14px", fontSize: 12.5, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", background: view.name === "overview" ? D.orange : "transparent", color: view.name === "overview" ? "#fff" : D.dim } }, "Vista General"),
-    ),
     view.name === "home"
-      ? h(Home, { pinned, onPin, onOpen: id => setView({ name: "detail", id }) })
-      : view.name === "overview"
-        ? h(Overview, { onOpen: id => setView({ name: "detail", id }) })
-        : account
-          ? h(Detail, { account, range, setRange })
-          : h("div", { style: { color: D.faint, textAlign: "center", padding: 40 } }, "Cuenta no disponible."),
+      ? h(Home, { onOpen: id => setView({ name: "detail", id }) })
+      : account
+        ? h(Detail, { account, range, setRange })
+        : h("div", { style: { color: D.faint, textAlign: "center", padding: 40 } }, "Cuenta no disponible."),
   );
 }
 

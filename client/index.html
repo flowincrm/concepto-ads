@@ -571,18 +571,35 @@ const ALL_ACCOUNTS = [
 function Home({ onOpen }) {
   const [q, setQ] = useState("");
   const [metrics, setMetrics] = useState({});
-  const [budgets, setBudgets] = useState(() => { try { return JSON.parse(localStorage.getItem("ov_budgets")||"{}"); } catch { return {}; } });
+  const [settings, setSettings] = useState({}); // { accountId: { budget, targetCPM, targetCPC, taskDone, taskWeek } }
   const [loading, setLoading] = useState(false);
   const [extraCols, setExtraCols] = useState(false);
   const [editBudget, setEditBudget] = useState(null);
   const [budgetInput, setBudgetInput] = useState("");
   const [pinned, setPinned] = useState(() => { try { return JSON.parse(localStorage.getItem("cc_pinned")||"[]"); } catch { return []; } });
 
-  const saveBudget = (id, val) => {
-    const nb = { ...budgets, [id]: val === "" ? null : +val };
-    setBudgets(nb);
-    localStorage.setItem("ov_budgets", JSON.stringify(nb));
+  // Semana actual ISO para auto-reset de tareas
+  const currentWeek = (() => {
+    const d = new Date();
+    const jan1 = new Date(d.getFullYear(), 0, 1);
+    const wk = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+    return `${d.getFullYear()}-W${String(wk).padStart(2,"0")}`;
+  })();
+
+  // Cargar settings del servidor al iniciar
+  useEffect(() => {
+    apiFetch("/api/settings").then(s => setSettings(s || {})).catch(() => {});
+  }, []);
+
+  const updateSetting = async (id, key, val) => {
+    const current = settings[id] || {};
+    const updated = { ...current, [key]: val };
+    setSettings(prev => ({ ...prev, [id]: updated }));
+    apiFetch(`/api/settings/${id}`, { method: "POST", body: JSON.stringify(updated) }).catch(() => {});
   };
+
+  const saveBudget = (id, val) => updateSetting(id, "budget", val === "" ? null : +val);
+  const getSetting = (id, key) => (settings[id] || {})[key] || null;
 
   const togglePin = (id) => {
     const nx = pinned.includes(id) ? pinned.filter(x=>x!==id) : [...pinned, id];
@@ -636,6 +653,13 @@ function Home({ onOpen }) {
     return D.green;
   };
 
+  // Objetivos compartidos desde el servidor
+  const getTargetCPM = (id) => getSetting(id, "targetCPM");
+  const getTargetCPC = (id) => getSetting(id, "targetCPC");
+  const cpmColor = (id, val) => { const t = getTargetCPM(id); if (t && val > t) return D.red; return D.text; };
+  const cpcColor = (id, val) => { const t = getTargetCPC(id); if (t && val > t) return D.red; return D.text; };
+  const calcCPC = (acc) => toNum(acc.clicks) > 0 ? toNum(acc.spend) / toNum(acc.clicks) : 0;
+
   const TH = { padding: "8px 12px", fontSize: 10, fontWeight: 700, color: D.faint, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${D.line}`, whiteSpace: "nowrap", background: D.surface, textAlign: "right" };
   const TH_L = { ...TH, textAlign: "left" };
   const TD = { padding: "9px 12px", fontSize: 12.5, color: D.text, borderBottom: `1px solid ${D.lineSoft}`, whiteSpace: "nowrap", textAlign: "right" };
@@ -654,7 +678,7 @@ function Home({ onOpen }) {
       h("div", { style: { fontSize: 11.5, color: D.faint } }, `${filtered.length} cuentas · últimos 7 días`),
       h("div", { style: { marginLeft: "auto", display: "flex", gap: 6 } },
         h("button", { onClick: () => setExtraCols(v=>!v), style: { fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 8, border: `1px solid ${D.line}`, background: extraCols ? D.orangeSoft : D.card, color: extraCols ? D.orange : D.dim, cursor: "pointer" } },
-          extraCols ? "− Menos columnas" : "+ Más columnas"
+          extraCols ? "− Ocultar Instagram" : "+ Columnas Instagram"
         ),
         h("button", { onClick: loadAll, disabled: loading, style: { fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 8, border: `1px solid ${D.line}`, background: D.card, color: D.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, opacity: loading ? 0.6 : 1 } },
           loading ? h("span", { className: "spin" }, icon("Loader2", 13, D.faint)) : icon("RefreshCw", 13), loading ? "Actualizando…" : "Actualizar"
@@ -675,9 +699,11 @@ function Home({ onOpen }) {
             h("th", { style: TH }, "% Ejec."),
             h("th", { style: TH }, "Conversac."),
             h("th", { style: TH }, "Costo/msj"),
+            h("th", { style: TH }, "Costo/clic"),
             h("th", { style: TH }, "CTR"),
-            extraCols && h("th", { style: TH }, "Alcance"),
-            extraCols && h("th", { style: TH }, "Impresiones"),
+            h("th", { style: TH }, "Alcance"),
+            h("th", { style: TH }, "Impresiones"),
+            h("th", { style: { ...TH, textAlign: "center", minWidth: 60 } }, "Tarea"),
             extraCols && h("th", { style: TH }, "Seg. IG"),
             extraCols && h("th", { style: TH }, "Visitas IG"),
           ),
@@ -687,7 +713,7 @@ function Home({ onOpen }) {
             const m = metrics[a.id];
             const acc = m?.account || {};
             const st = statusInfo(m);
-            const budget = budgets[a.id];
+            const budget = getSetting(a.id, "budget");
             const pctExec = pctBudget(acc.spend, budget);
             const isPinned = pinned.includes(a.id);
             const isEven = idx % 2 === 0;
@@ -717,7 +743,7 @@ function Home({ onOpen }) {
               h("td", { style: TD, onClick: e => e.stopPropagation() },
                 editBudget === a.id
                   ? h("input", { autoFocus: true, type: "number", value: budgetInput, placeholder: "0", onChange: e => setBudgetInput(e.target.value), onBlur: () => { saveBudget(a.id, budgetInput); setEditBudget(null); }, onKeyDown: e => { if (e.key==="Enter") { saveBudget(a.id, budgetInput); setEditBudget(null); } }, style: { width: 80, background: D.bg, border: `1px solid ${D.orange}`, borderRadius: 6, color: D.text, fontSize: 12, padding: "3px 6px", outline: "none", textAlign: "right" } })
-                  : h("button", { onClick: () => { setEditBudget(a.id); setBudgetInput(budget||""); }, style: { background: "none", border: `1px dashed ${D.line}`, borderRadius: 6, color: budget ? D.dim : D.lineSoft, fontSize: 11.5, fontWeight: 600, padding: "2px 8px", cursor: "pointer" } }, budget ? heroMoney(budget, a.cur) : "+ agregar"),
+                  : h("button", { onClick: () => { setEditBudget(a.id); setBudgetInput(getSetting(a.id,"budget")||""); }, style: { background: "none", border: `1px dashed ${D.line}`, borderRadius: 6, color: getSetting(a.id,"budget") ? D.dim : D.lineSoft, fontSize: 11.5, fontWeight: 600, padding: "2px 8px", cursor: "pointer" } }, getSetting(a.id,"budget") ? heroMoney(getSetting(a.id,"budget"), a.cur) : "+ agregar"),
               ),
               /* % ejecutado */
               h("td", { style: { ...TD, fontWeight: 700, color: pctColor(pctExec) }, onClick: () => onOpen(a.id) },
@@ -725,11 +751,22 @@ function Home({ onOpen }) {
               ),
               /* Métricas */
               h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.conversations) : "—"),
-              h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroCost(acc.cost_per_msg, a.cur) : "—"),
+              h("td", { style: { ...TD, color: m ? cpmColor(a.id, toNum(acc.cost_per_msg)) : D.text, fontWeight: m && cpmColor(a.id, toNum(acc.cost_per_msg)) === D.red ? 700 : 400 }, onClick: () => onOpen(a.id) }, m ? heroCost(acc.cost_per_msg, a.cur) : "—"),
+              h("td", { style: { ...TD, color: m ? cpcColor(a.id, calcCPC(acc)) : D.text, fontWeight: m && cpcColor(a.id, calcCPC(acc)) === D.red ? 700 : 400 }, onClick: () => onOpen(a.id) }, m && calcCPC(acc) > 0 ? heroCost(calcCPC(acc), a.cur) : "—"),
               h("td", { style: { ...TD, color: toNum(acc.ctr) >= 1 ? D.green : D.text, fontWeight: toNum(acc.ctr) >= 1 ? 700 : 400 }, onClick: () => onOpen(a.id) }, m ? pct(acc.ctr) : "—"),
-              /* Extra */
-              extraCols && h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.reach) : "—"),
-              extraCols && h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.impressions) : "—"),
+              h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.reach) : "—"),
+              h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.impressions) : "—"),
+              /* Tarea semanal */
+              h("td", { style: { ...TD, textAlign: "center", padding: "9px 8px" }, onClick: e => {
+                e.stopPropagation();
+                const isDone = getSetting(a.id, "taskWeek") === currentWeek && getSetting(a.id, "taskDone");
+                if (isDone) { updateSetting(a.id, "taskDone", false); }
+                else { updateSetting(a.id, "taskDone", true); updateSetting(a.id, "taskWeek", currentWeek); }
+              }},
+                getSetting(a.id, "taskWeek") === currentWeek && getSetting(a.id, "taskDone")
+                  ? h("span", { style: { fontSize: 16 } }, "✅")
+                  : h("span", { style: { fontSize: 13, color: D.lineSoft, cursor: "pointer" } }, "○"),
+              ),
               extraCols && h("td", { style: { ...TD, color: "#C13584" }, onClick: () => onOpen(a.id) }, m && toNum(acc.ig_follows)>0 ? heroNum(acc.ig_follows) : "—"),
               extraCols && h("td", { style: { ...TD, color: "#C13584" }, onClick: () => onOpen(a.id) }, m && toNum(acc.ig_profile_visits)>0 ? heroNum(acc.ig_profile_visits) : "—"),
             );
@@ -805,6 +842,17 @@ function Detail({ account, range, setRange }) {
   const [anState, setAnState] = useState("idle");
   const [target, setTarget] = useState(localStorage.getItem(`tgt:${account.id}`) || "");
   const [targetCPC, setTargetCPC] = useState(localStorage.getItem(`tgtcpc:${account.id}`) || "");
+
+  // Sincronizar con settings del servidor al abrir
+  useEffect(() => {
+    apiFetch("/api/settings").then(s => {
+      const a = s[account.id];
+      if (a) {
+        if (a.targetCPM && !target) { setTarget(String(a.targetCPM)); localStorage.setItem(`tgt:${account.id}`, String(a.targetCPM)); }
+        if (a.targetCPC && !targetCPC) { setTargetCPC(String(a.targetCPC)); localStorage.setItem(`tgtcpc:${account.id}`, String(a.targetCPC)); }
+      }
+    }).catch(()=>{});
+  }, [account.id]);
   const [editTarget, setEditTarget] = useState(null); // "cpm" | "cpc" | null
   const reqId = useRef(0);
 
@@ -920,30 +968,6 @@ function Detail({ account, range, setRange }) {
         toNum(acc.ig_follows) > 0 && h(Stat, { iconName: "UserPlus", label: "Nuevos seguidores IG", value: heroNum(acc.ig_follows), tint: "#C13584" }),
       ),
 
-      /* Análisis IA */
-      h("div", { style: { marginTop: 16, background: D.card, border: `1px solid ${D.line}`, borderRadius: 14, padding: "14px 15px" } },
-        h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
-          icon("Sparkles", 15, D.orange),
-          h("span", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 } }, "RESUMEN IA"),
-          anState === "loading" && h("span", { className: "spin", style: { marginLeft: 4 } }, icon("Loader2", 13, D.faint)),
-        ),
-        anState === "loading" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "Analizando cuenta y campañas…"),
-        anState === "error" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "No se pudo generar el análisis. ", h("button", { onClick: () => run(true), style: { color: D.orange, background: "none", border: "none", cursor: "pointer", fontWeight: 700 } }, "Reintentar")),
-        anState === "done" && an && h("div", null,
-          an.veredicto && h("div", { style: { fontSize: 13.5, color: D.text, fontWeight: 600, marginBottom: 12, lineHeight: 1.5 } }, an.veredicto),
-          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 } },
-            h("div", { style: { background: D.greenSoft, borderRadius: 10, padding: "11px 13px" } },
-              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.green, marginBottom: 7, letterSpacing: 0.3 } }, "LO BUENO"),
-              ...(an.bueno || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.green } }, "+"), t)),
-            ),
-            h("div", { style: { background: D.redSoft, borderRadius: 10, padding: "11px 13px" } },
-              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.red, marginBottom: 7, letterSpacing: 0.3 } }, "A MEJORAR"),
-              ...(an.malo || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.red } }, "–"), t)),
-            ),
-          ),
-        ),
-      ),
-
       /* Campañas */
       h("div", { style: { marginTop: 16 } },
         h("div", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3, marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
@@ -967,13 +991,13 @@ function Detail({ account, range, setRange }) {
               h("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
                 h("span", null, "Obj. msj:"),
                 editTarget === "cpm"
-                  ? h("input", { autoFocus: true, type: "number", value: target, placeholder: "0", onChange: e => { setTarget(e.target.value); localStorage.setItem(`tgt:${account.id}`, e.target.value); }, onBlur: () => setEditTarget(null), onKeyDown: e => e.key === "Enter" && setEditTarget(null), style: { width: 70, background: D.card, border: `1px solid ${D.orange}`, borderRadius: 7, color: D.text, fontSize: 12, padding: "4px 7px", outline: "none", fontFamily: "inherit" } })
+                  ? h("input", { autoFocus: true, type: "number", value: target, placeholder: "0", onChange: e => { setTarget(e.target.value); localStorage.setItem(`tgt:${account.id}`, e.target.value); apiFetch(`/api/settings/${account.id}`, { method: 'POST', body: JSON.stringify({ targetCPM: +e.target.value || null }) }).catch(()=>{}); }, onBlur: () => setEditTarget(null), onKeyDown: e => e.key === "Enter" && setEditTarget(null), style: { width: 70, background: D.card, border: `1px solid ${D.orange}`, borderRadius: 7, color: D.text, fontSize: 12, padding: "4px 7px", outline: "none", fontFamily: "inherit" } })
                   : h("button", { onClick: () => setEditTarget("cpm"), style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 7, color: target ? D.orange : D.faint, fontSize: 12, fontWeight: 700, padding: "4px 9px", cursor: "pointer" } }, target ? heroCost(+target, cur) : "definir"),
               ),
               h("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
                 h("span", null, "Obj. clic:"),
                 editTarget === "cpc"
-                  ? h("input", { autoFocus: true, type: "number", value: targetCPC, placeholder: "0", onChange: e => { setTargetCPC(e.target.value); localStorage.setItem(`tgtcpc:${account.id}`, e.target.value); }, onBlur: () => setEditTarget(null), onKeyDown: e => e.key === "Enter" && setEditTarget(null), style: { width: 70, background: D.card, border: `1px solid ${D.orange}`, borderRadius: 7, color: D.text, fontSize: 12, padding: "4px 7px", outline: "none", fontFamily: "inherit" } })
+                  ? h("input", { autoFocus: true, type: "number", value: targetCPC, placeholder: "0", onChange: e => { setTargetCPC(e.target.value); localStorage.setItem(`tgtcpc:${account.id}`, e.target.value); apiFetch(`/api/settings/${account.id}`, { method: 'POST', body: JSON.stringify({ targetCPC: +e.target.value || null }) }).catch(()=>{}); }, onBlur: () => setEditTarget(null), onKeyDown: e => e.key === "Enter" && setEditTarget(null), style: { width: 70, background: D.card, border: `1px solid ${D.orange}`, borderRadius: 7, color: D.text, fontSize: 12, padding: "4px 7px", outline: "none", fontFamily: "inherit" } })
                   : h("button", { onClick: () => setEditTarget("cpc"), style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 7, color: targetCPC ? D.orange : D.faint, fontSize: 12, fontWeight: 700, padding: "4px 9px", cursor: "pointer" } }, targetCPC ? heroCost(+targetCPC, cur) : "definir"),
               ),
             ),
@@ -987,6 +1011,30 @@ function Detail({ account, range, setRange }) {
               h("span", { style: { fontSize: 12.5, color: D.text, lineHeight: 1.5 } }, al.text),
             );
           }),
+        ),
+      ),
+
+      /* Análisis IA */
+      h("div", { style: { marginTop: 16, background: D.card, border: `1px solid ${D.line}`, borderRadius: 14, padding: "14px 15px" } },
+        h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
+          icon("Sparkles", 15, D.orange),
+          h("span", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 } }, "RESUMEN IA"),
+          anState === "loading" && h("span", { className: "spin", style: { marginLeft: 4 } }, icon("Loader2", 13, D.faint)),
+        ),
+        anState === "loading" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "Analizando cuenta y campañas…"),
+        anState === "error" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "No se pudo generar el análisis. ", h("button", { onClick: () => run(true), style: { color: D.orange, background: "none", border: "none", cursor: "pointer", fontWeight: 700 } }, "Reintentar")),
+        anState === "done" && an && h("div", null,
+          an.veredicto && h("div", { style: { fontSize: 13.5, color: D.text, fontWeight: 600, marginBottom: 12, lineHeight: 1.5 } }, an.veredicto),
+          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 } },
+            h("div", { style: { background: D.greenSoft, borderRadius: 10, padding: "11px 13px" } },
+              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.green, marginBottom: 7, letterSpacing: 0.3 } }, "LO BUENO"),
+              ...(an.bueno || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.green } }, "+"), t)),
+            ),
+            h("div", { style: { background: D.redSoft, borderRadius: 10, padding: "11px 13px" } },
+              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.red, marginBottom: 7, letterSpacing: 0.3 } }, "A MEJORAR"),
+              ...(an.malo || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.red } }, "–"), t)),
+            ),
+          ),
         ),
       ),
 

@@ -89,6 +89,14 @@ const isoToday = () => new Date().toISOString().slice(0,10);
 const isoDaysAgo = n => new Date(Date.now()-n*86400000).toISOString().slice(0,10);
 
 /* ================================================================== */
+const { createElement: h, useState, useEffect, useMemo, useCallback, useRef } = React;
+const L = window.lucide || {};
+
+const icon = (name, size = 16, color) => {
+  if (!L[name]) return null;
+  return h(L[name], { size, color, strokeWidth: 2 });
+};
+
 /* API client                                                          */
 /* ================================================================== */
 async function apiFetch(path, opts = {}) {
@@ -109,8 +117,6 @@ async function apiFetch(path, opts = {}) {
 /* ================================================================== */
 /* Cuentas                                                             */
 /* ================================================================== */
-
-  return 
 
 /* Login */
 function Login({ onLogin }) {

@@ -688,7 +688,7 @@ function Home({ onOpen }) {
             const acc = m?.account || {};
             const st = statusInfo(m);
             const budget = budgets[a.id];
-            const pct = pctBudget(acc.spend, budget);
+            const pctExec = pctBudget(acc.spend, budget);
             const isPinned = pinned.includes(a.id);
             const isEven = idx % 2 === 0;
             const rowBg = isEven ? D.surface : D.card;
@@ -720,8 +720,8 @@ function Home({ onOpen }) {
                   : h("button", { onClick: () => { setEditBudget(a.id); setBudgetInput(budget||""); }, style: { background: "none", border: `1px dashed ${D.line}`, borderRadius: 6, color: budget ? D.dim : D.lineSoft, fontSize: 11.5, fontWeight: 600, padding: "2px 8px", cursor: "pointer" } }, budget ? heroMoney(budget, a.cur) : "+ agregar"),
               ),
               /* % ejecutado */
-              h("td", { style: { ...TD, fontWeight: 700, color: pctColor(pct) }, onClick: () => onOpen(a.id) },
-                pct != null ? `${pct}%${pct > 100 ? " ⚠" : ""}` : "—"
+              h("td", { style: { ...TD, fontWeight: 700, color: pctColor(pctExec) }, onClick: () => onOpen(a.id) },
+                pctExec != null ? `${pctExec}%${pctExec > 100 ? " ⚠" : ""}` : "—"
               ),
               /* Métricas */
               h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.conversations) : "—"),

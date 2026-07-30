@@ -109,76 +109,8 @@ async function apiFetch(path, opts = {}) {
 /* ================================================================== */
 /* Cuentas                                                             */
 /* ================================================================== */
-const ACCOUNTS = [
-  ["148254890","Piccini","","ARS"],
-  ["249080421","Horizonte","","ARS"],
-  ["2054205255379518","Pueblo Mio Nueva","Pueblo Mio Restaurante","ARS"],
-  ["27457958657139152","Flowin","Flowin CRM","ARS"],
-  ["2494653184289010","Equilibrio 2026","equilibrio.salud.estetica","ARS"],
-  ["881818354230758","Elan Travel","Elan Travel","ARS"],
-  ["2423263937942828","Grossvial 2021","Pucci Design","ARS"],
-  ["613966532424320","Nico Mansilla","","ARS"],
-  ["270071817338033","Soluciones Piscinas","_allfruit","ARS"],
-  ["2997907086965858","Aerosilla","Concepto Comunicación III","ARS"],
-  ["300683204394771","Aqua Fast San Francisco","Concepto Comunicación III","ARS"],
-  ["295010658349521","Aquafast Alta Gracia","Concepto Comunicación III","ARS"],
-  ["783957612137438","Concepto Argentina","Cormoran","ARS"],
-  ["292264855541118","Valholl","san nicolas","ARS"],
-  ["962433610899045","Cámara de Turismo","Cámara de Turismo Carlos Paz","ARS"],
-  ["679501909305318","HartBar","Concepto Comunicación III","ARS"],
-  ["298248388243469","Cormoran","Cormoran","ARS"],
-  ["321917018891850","Espacio Modulos","Valentin","ARS"],
-  ["405266427319447","Libremak","libremak","ARS"],
-  ["673321173295596","Lotus","Carlos Paz Propiedades","ARS"],
-  ["421000975871223","NEW YORK","New York Heladería Café","ARS"],
-  ["934796460662507","Di Rienzo","Di Rienzo Diagnóstico","ARS"],
-  ["671127420449431","Keops Publicidad","Keops","ARS"],
-  ["298671268742251","Mónaco - Hotel & Resort","Hotel Monaco","ARS"],
-  ["268555408746746","Biderbost 2024","Biderbost","ARS"],
-  ["668770170851927","Guapas Bar","Guapas Bar","ARS"],
-  ["1009674249916047","Pueblo Mio Restaurante","Pueblo Mio Restaurante","ARS"],
-  ["2607934066011919","La Pulperia","La Pulperia","ARS"],
-  ["613341067294584","Valhöll Argentina by UTMB","Valhöll Argentina by UTMB","USD"],
-  ["1393004314830939","Actitud Prado","Actitud Prado","ARS"],
-  ["3515954425356367","Joaquin ADS","Joaquin","USD"],
-  ["1356475531568887","Euge CP 2023","eugenia.testore","ARS"],
-  ["607168158088957","Proyectar","gproyectarsanfco","ARS"],
-  ["231514086625158","Host Coworking 2023","Host Coworking","ARS"],
-  ["908140167640188","Simeoni","Joaquin","ARS"],
-  ["924467905838224","Carla Art Studio","Todo diseño","ARS"],
-  ["286226457818437","Graficus ADS","Graficus","ARS"],
-  ["1692451318198396","Rancho Norte","Rancho Norte","ARS"],
-  ["494756873078964","saint tropez","sainttropezhotelsuites","ARS"],
-  ["1308458966986728","COBICO","Billy Concepto","ARS"],
-  ["1051546939997605","VECAT","Glow Park","ARS"],
-  ["8691014401003127","Autogestarse","Autogestarse","ARS"],
-  ["986896830233150","Todo Verde","TODO VERDE","ARS"],
-  ["685840817164309","Valik","Valik","ARS"],
-  ["1397424915044370","Panda Market","Panda Market","ARS"],
-  ["1387524565925014","Wine Group","Wine Group Cordoba","ARS"],
-  ["2610298359318699","Qirubber","Qirubber","ARS"],
-  ["1479515210069384","Fullmart OK","Fullmart","ARS"],
-  ["760147720302294","Raíz Tienda Saludable","Raíz Tienda Natural","ARS"],
-  ["1484075675926924","Zibianca","Zibianca","ARS"],
-  ["24708092905489003","Tienda 1930","Tienda 1930","ARS"],
-  ["1937267670385700","Ostara.ceramica","Portfolio Ostara.ceramica","ARS"],
-  ["3844927925804372","Doménico","Billy Concepto","ARS"],
-  ["1835303394005753","Casa de Blanco","Casa de Blanco","ARS"],
-  ["1345033460089754","hotelkinvcp","hotelkinvcp","ARS"],
-  ["842054995483033","Nacqua","gproyectarsanfco","ARS"],
-  ["642177252260758","MGSO","MGSO","ARS"],
-].map(([id, name, biz, cur]) => ({ id, name: name || biz || "Sin nombre", biz: biz || "", cur }));
 
-/* ================================================================== */
-/* Componentes React (sin JSX — createElement puro)                   */
-/* ================================================================== */
-const { createElement: h, useState, useEffect, useMemo, useCallback, useRef } = React;
-const L = window.lucide || {};
-
-const icon = (name, size = 16, color) => {
-  if (!L[name]) return null;
-  return h(L[name], { size, color, strokeWidth: 2 });
-};
+  return 
 
 /* Login */
 function Login({ onLogin }) {
@@ -208,31 +140,20 @@ function Login({ onLogin }) {
     setLoading(false);
   };
 
-  const inp = (value, onChange, type = "text", placeholder = "") =>
+  const inp = (value, onChange, type, placeholder) =>
     h("input", {
-      type, value, onChange: e => onChange(e.target.value), placeholder,
-      style: {
-        width: "100%", background: D.card, border: `1px solid ${D.line}`,
-        borderRadius: 10, color: D.text, fontSize: 14, padding: "12px 14px",
-        outline: "none", fontFamily: "inherit",
-      }
+      type: type || "text", value, onChange: e => onChange(e.target.value), placeholder,
+      style: { width: "100%", background: D.card, border: `1px solid ${D.line}`, borderRadius: 10, color: D.text, fontSize: 14, padding: "12px 14px", outline: "none", fontFamily: "inherit" }
     });
 
-  return h("div", {
-    style: {
-      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: D.bg, padding: 20,
-    }
-  },
+  return h("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: D.bg, padding: 20 } },
     h("div", { style: { width: "100%", maxWidth: 420 } },
       h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 32 } },
-        h("div", {
-          style: { width: 44, height: 44, borderRadius: 12, background: D.orange, display: "flex", alignItems: "center", justifyContent: "center" }
-        }, h("div", { style: { width: 16, height: 16, borderRadius: "50%", background: D.bg } })),
+        h("img", { src: "/logo.png", style: { width: 44, height: 44, borderRadius: 12, objectFit: "cover" } }),
         h("div", null,
-          h("div", { style: { fontSize: 20, fontWeight: 800, color: D.text } }, "Meta Ads · Command Center"),
+          h("div", { style: { fontSize: 20, fontWeight: 800, color: D.text } }, "Meta Ads \u00b7 Command Center"),
           h("div", { style: { fontSize: 12, color: D.faint } }, "Concepto Agencia"),
-        )
+        ),
       ),
       h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
         h("div", null,
@@ -246,14 +167,10 @@ function Login({ onLogin }) {
         err && h("div", { style: { background: D.redSoft, border: `1px solid ${D.red}44`, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: D.text } }, err),
         h("button", {
           onClick: submit, disabled: loading || !server || !secret,
-          style: {
-            background: loading ? D.line : D.orange, color: "#fff", border: "none",
-            borderRadius: 10, padding: "13px", fontSize: 14, fontWeight: 700, cursor: "pointer",
-            opacity: (!server || !secret) ? 0.5 : 1, transition: "all 0.15s",
-          }
-        }, loading ? "Conectando…" : "Conectar al panel"),
-      )
-    )
+          style: { background: loading ? D.line : D.orange, color: "#fff", border: "none", borderRadius: 10, padding: "13px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: (!server || !secret) ? 0.5 : 1, transition: "all 0.15s" }
+        }, loading ? "Conectando\u2026" : "Conectar al panel"),
+      ),
+    ),
   );
 }
 
@@ -596,7 +513,8 @@ function Home({ onOpen }) {
     setLoading(false);
   };
 
-  useEffect(() => { loadAll(); }, []);
+  // Cargar métricas cuando las cuentas estén disponibles
+  useEffect(() => { if (accounts.length > 0) loadAll(); }, [accounts.length]);
 
   // Filtrar por búsqueda, fijadas primero
   const filtered = useMemo(() => {

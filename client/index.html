@@ -1,1006 +1,583 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meta Ads · Command Center — Concepto</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.383.0/umd/lucide.min.js"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: #0E0C07;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-      color: #F6F1E7;
-      min-height: 100vh;
-    }
-    #root { max-width: 960px; margin: 0 auto; padding: 20px 16px 60px; }
-    .spin { animation: sp 0.9s linear infinite; display: inline-block; }
-    @keyframes sp { to { transform: rotate(360deg); } }
-    input::placeholder { color: #7C7360; }
-    input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
-    input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #1F1810; }
-    ::-webkit-scrollbar-thumb { background: #3A2F1E; border-radius: 3px; }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Meta Ads · Command Center — Concepto</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.383.0/umd/lucide.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0E0C07;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#F6F1E7;min-height:100vh}
+#root{max-width:1200px;margin:0 auto;padding:20px 16px 60px}
+.spin{animation:sp .9s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+input::placeholder{color:#7C7360}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#1F1810}::-webkit-scrollbar-thumb{background:#3A2F1E;border-radius:3px}
+</style>
 </head>
 <body>
 <div id="root"></div>
 <script>
-/* ================================================================== */
-/* Configuración — se actualiza automáticamente al hacer login         */
-/* ================================================================== */
+/* ================================================================ */
+/* CONFIG                                                            */
+/* ================================================================ */
 const CONFIG = {
-  // Esta URL se reemplaza automáticamente al conectar con el servidor
   serverUrl: localStorage.getItem("cc_server") || "",
   secret: localStorage.getItem("cc_secret") || "",
 };
 
-/* ================================================================== */
-/* Helpers de formato                                                  */
-/* ================================================================== */
+/* Paleta */
 const D = {
-  bg: "#151109", surface: "#1F1810", card: "#261E14",
-  line: "#3A2F1E", lineSoft: "#2C2317",
-  text: "#F6F1E7", dim: "#B7AC97", faint: "#7C7360",
-  orange: "#F2740B", orangeSoft: "#3A2410",
-  green: "#3FBE79", greenSoft: "#16321F",
-  amber: "#E6A93A", amberSoft: "#37280F",
-  red: "#E8613E", redSoft: "#3A190F",
+  bg:"#151109",surface:"#1F1810",card:"#261E14",
+  line:"#3A2F1E",lineSoft:"#2C2317",
+  text:"#F6F1E7",dim:"#B7AC97",faint:"#7C7360",
+  orange:"#F2740B",orangeSoft:"#3A2410",
+  green:"#3FBE79",greenSoft:"#16321F",
+  amber:"#E6A93A",amberSoft:"#37280F",
+  red:"#E8613E",redSoft:"#3A190F",
 };
 
+/* Formato */
 const toNum = v => Number.isFinite(+v) ? +v : 0;
-const sym = cur => cur === "USD" ? "US$ " : cur === "DKK" ? "DKK " : "$ ";
-
+const sym = c => c==="USD"?"US$ ":c==="DKK"?"DKK ":"$ ";
 const compact = n => {
-  const v = toNum(n), a = Math.abs(v);
-  const f = (x, d) => x.toFixed(d).replace(".", ",").replace(/,0$/, "");
-  if (a >= 1_000_000) return f(v/1_000_000, a >= 10_000_000 ? 0 : 1) + "M";
-  if (a >= 100_000) return f(v/1_000, 0) + "K";
-  if (a >= 10_000) return f(v/1_000, 1) + "K";
-  return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(v);
+  const v=toNum(n),a=Math.abs(v);
+  const f=(x,d)=>x.toFixed(d).replace(".",",").replace(/,0$/,"");
+  if(a>=1e6)return f(v/1e6,a>=1e7?0:1)+"M";
+  if(a>=1e5)return f(v/1e3,0)+"K";
+  if(a>=1e4)return f(v/1e3,1)+"K";
+  return new Intl.NumberFormat("es-AR",{maximumFractionDigits:0}).format(v);
 };
-const heroMoney = (n, cur) => {
-  const v = toNum(n);
-  if (Math.abs(v) >= 100_000) return sym(cur) + compact(v);
-  return new Intl.NumberFormat("es-AR", { style:"currency", currency: cur||"ARS", maximumFractionDigits:0 }).format(v);
-};
-const heroCost = (n, cur) => {
-  if (n == null) return "—";
-  const v = toNum(n), a = Math.abs(v);
-  if (a >= 100_000) return sym(cur) + compact(v);
-  if (a >= 1_000) return new Intl.NumberFormat("es-AR", { style:"currency", currency: cur||"ARS", maximumFractionDigits:0 }).format(v);
-  return new Intl.NumberFormat("es-AR", { style:"currency", currency: cur||"ARS", maximumFractionDigits:2 }).format(v);
-};
-const heroNum = n => toNum(n) >= 10_000 ? compact(n) : new Intl.NumberFormat("es-AR").format(toNum(n));
-const cellMoney = heroMoney;
-const cellCost = heroCost;
-const pct = n => n == null || n === "" ? "—" : `${toNum(n).toFixed(2)}%`;
-const ago = ts => {
-  if (!ts) return "";
-  const s = Math.round((Date.now()-ts)/1000);
-  if (s < 60) return "recién";
-  if (s < 3600) return `hace ${Math.round(s/60)} min`;
-  return `hace ${Math.round(s/3600)} h`;
-};
-const isoToday = () => new Date().toISOString().slice(0,10);
-const isoDaysAgo = n => new Date(Date.now()-n*86400000).toISOString().slice(0,10);
+const heroMoney=(n,c)=>{const v=toNum(n);if(Math.abs(v)>=1e5)return sym(c)+compact(v);return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:0}).format(v)};
+const heroCost=(n,c)=>{if(n==null)return"\u2014";const v=toNum(n),a=Math.abs(v);if(a>=1e5)return sym(c)+compact(v);if(a>=1e3)return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:0}).format(v);return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:2}).format(v)};
+const heroNum=n=>toNum(n)>=1e4?compact(n):new Intl.NumberFormat("es-AR").format(toNum(n));
+const pct=n=>n==null||n===""?"\u2014":`${toNum(n).toFixed(2)}%`;
+const ago=ts=>{if(!ts)return"";const s=Math.round((Date.now()-ts)/1000);if(s<60)return"reci\u00e9n";if(s<3600)return`hace ${Math.round(s/60)} min`;return`hace ${Math.round(s/3600)} h`};
 
-/* ================================================================== */
-const { createElement: h, useState, useEffect, useMemo, useCallback, useRef } = React;
-const L = window.lucide || {};
+/* React helpers */
+const {createElement:h,useState,useEffect,useMemo,useCallback,useRef}=React;
+const L=window.lucide||{};
+const icon=(name,size,color)=>{if(!L[name])return null;return h(L[name],{size:size||16,color,strokeWidth:2})};
 
-const icon = (name, size = 16, color) => {
-  if (!L[name]) return null;
-  return h(L[name], { size, color, strokeWidth: 2 });
-};
-
-/* API client                                                          */
-/* ================================================================== */
-async function apiFetch(path, opts = {}) {
-  const url = CONFIG.serverUrl.replace(/\/$/, "") + path;
-  const res = await fetch(url, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      "x-panel-secret": CONFIG.secret,
-      ...(opts.headers || {}),
-    },
-  });
-  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-  if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+/* API */
+async function apiFetch(path,opts={}){
+  const url=CONFIG.serverUrl.replace(/\/$/,"")+path;
+  const res=await fetch(url,{...opts,headers:{"Content-Type":"application/json","x-panel-secret":CONFIG.secret,...(opts.headers||{})}});
+  const data=await res.json().catch(()=>({error:`HTTP ${res.status}`}));
+  if(!res.ok)throw new Error(data.error||`Error ${res.status}`);
   return data;
 }
 
-/* ================================================================== */
-/* Cuentas                                                             */
-/* ================================================================== */
+/* Semana ISO actual */
+const currentWeek=(()=>{const d=new Date();const jan1=new Date(d.getFullYear(),0,1);const wk=Math.ceil(((d-jan1)/864e5+jan1.getDay()+1)/7);return`${d.getFullYear()}-W${String(wk).padStart(2,"0")}`})();
 
-/* Login */
-function Login({ onLogin }) {
-  const [server, setServer] = useState(CONFIG.serverUrl || "https://");
-  const [secret, setSecret] = useState("");
-  const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async () => {
-    setErr(""); setLoading(true);
-    const url = server.replace(/\/$/, "");
-    try {
-      const res = await fetch(url + "/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret }),
-      });
-      const d = await res.json();
-      if (!d.ok) throw new Error("Clave incorrecta");
-      CONFIG.serverUrl = url; CONFIG.secret = secret;
-      localStorage.setItem("cc_server", url);
-      localStorage.setItem("cc_secret", secret);
+/* ================================================================ */
+/* LOGIN                                                             */
+/* ================================================================ */
+function Login({onLogin}){
+  const[server,setServer]=useState(CONFIG.serverUrl||"https://");
+  const[secret,setSecret]=useState("");
+  const[err,setErr]=useState("");
+  const[loading,setLoading]=useState(false);
+  const submit=async()=>{
+    setErr("");setLoading(true);
+    const url=server.replace(/\/$/,"");
+    try{
+      const res=await fetch(url+"/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({secret})});
+      const d=await res.json();if(!d.ok)throw new Error("Clave incorrecta");
+      CONFIG.serverUrl=url;CONFIG.secret=secret;
+      localStorage.setItem("cc_server",url);localStorage.setItem("cc_secret",secret);
       onLogin();
-    } catch (e) {
-      setErr(e.message || "No se pudo conectar con el servidor");
-    }
+    }catch(e){setErr(e.message||"No se pudo conectar")}
     setLoading(false);
   };
-
-  const inp = (value, onChange, type, placeholder) =>
-    h("input", {
-      type: type || "text", value, onChange: e => onChange(e.target.value), placeholder,
-      style: { width: "100%", background: D.card, border: `1px solid ${D.line}`, borderRadius: 10, color: D.text, fontSize: 14, padding: "12px 14px", outline: "none", fontFamily: "inherit" }
-    });
-
-  return h("div", { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: D.bg, padding: 20 } },
-    h("div", { style: { width: "100%", maxWidth: 420 } },
-      h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 32 } },
-        h("img", { src: "/logo.png", style: { width: 44, height: 44, borderRadius: 12, objectFit: "cover" } }),
-        h("div", null,
-          h("div", { style: { fontSize: 20, fontWeight: 800, color: D.text } }, "Meta Ads \u00b7 Command Center"),
-          h("div", { style: { fontSize: 12, color: D.faint } }, "Concepto Agencia"),
-        ),
-      ),
-      h("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
-        h("div", null,
-          h("label", { style: { fontSize: 11, fontWeight: 700, color: D.dim, textTransform: "uppercase", letterSpacing: 0.4, display: "block", marginBottom: 6 } }, "URL del servidor"),
-          inp(server, setServer, "text", "https://tu-app.railway.app"),
-        ),
-        h("div", null,
-          h("label", { style: { fontSize: 11, fontWeight: 700, color: D.dim, textTransform: "uppercase", letterSpacing: 0.4, display: "block", marginBottom: 6 } }, "Clave de acceso"),
-          inp(secret, setSecret, "password", "Tu PANEL_SECRET"),
-        ),
-        err && h("div", { style: { background: D.redSoft, border: `1px solid ${D.red}44`, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: D.text } }, err),
-        h("button", {
-          onClick: submit, disabled: loading || !server || !secret,
-          style: { background: loading ? D.line : D.orange, color: "#fff", border: "none", borderRadius: 10, padding: "13px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: (!server || !secret) ? 0.5 : 1, transition: "all 0.15s" }
-        }, loading ? "Conectando\u2026" : "Conectar al panel"),
-      ),
-    ),
-  );
+  const inp=(val,set,type,ph)=>h("input",{type:type||"text",value:val,onChange:e=>set(e.target.value),placeholder:ph,style:{width:"100%",background:D.card,border:`1px solid ${D.line}`,borderRadius:10,color:D.text,fontSize:14,padding:"12px 14px",outline:"none",fontFamily:"inherit"}});
+  return h("div",{style:{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:D.bg,padding:20}},
+    h("div",{style:{width:"100%",maxWidth:420}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:32}},
+        h("img",{src:"/logo.png",style:{width:44,height:44,borderRadius:12,objectFit:"cover"}}),
+        h("div",null,h("div",{style:{fontSize:20,fontWeight:800,color:D.text}},"Meta Ads \u00b7 Command Center"),h("div",{style:{fontSize:12,color:D.faint}},"Concepto Agencia"))),
+      h("div",{style:{display:"flex",flexDirection:"column",gap:14}},
+        h("div",null,h("label",{style:{fontSize:11,fontWeight:700,color:D.dim,textTransform:"uppercase",letterSpacing:.4,display:"block",marginBottom:6}},"URL del servidor"),inp(server,setServer,"text","https://tu-app.railway.app")),
+        h("div",null,h("label",{style:{fontSize:11,fontWeight:700,color:D.dim,textTransform:"uppercase",letterSpacing:.4,display:"block",marginBottom:6}},"Clave de acceso"),inp(secret,setSecret,"password","Tu PANEL_SECRET")),
+        err&&h("div",{style:{background:D.redSoft,border:`1px solid ${D.red}44`,borderRadius:10,padding:"10px 14px",fontSize:13,color:D.text}},err),
+        h("button",{onClick:submit,disabled:loading||!server||!secret,style:{background:loading?D.line:D.orange,color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:700,cursor:"pointer",opacity:(!server||!secret)?.5:1}},loading?"Conectando\u2026":"Conectar al panel"))));
 }
 
-/* Stat card */
-function Stat({ iconName, label, value, tint, trend }) {
-  return h("div", {
-    style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 14, padding: "13px 14px", minWidth: 0 }
-  },
-    h("div", { style: { display: "flex", alignItems: "center", gap: 7, color: D.dim } },
-      icon(iconName, 13),
-      h("span", { style: { fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, label),
-    ),
-    h("div", { style: { fontSize: 22, fontWeight: 800, color: tint || D.text, marginTop: 8, lineHeight: 1.05, whiteSpace: "nowrap", overflow: "hidden" } }, value),
-    trend && h("div", { style: { marginTop: 5, display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: trend.color, fontWeight: 600 } },
-      icon(trend.dir === "up" ? "TrendingUp" : trend.dir === "down" ? "TrendingDown" : null, 12, trend.color),
-      trend.text,
-    ),
-  );
+/* ================================================================ */
+/* STAT CARD                                                         */
+/* ================================================================ */
+function Stat({iconName,label,value,tint,trend}){
+  return h("div",{style:{background:D.card,border:`1px solid ${D.line}`,borderRadius:14,padding:"13px 14px",minWidth:0}},
+    h("div",{style:{display:"flex",alignItems:"center",gap:7,color:D.dim}},icon(iconName,13),h("span",{style:{fontSize:10.5,letterSpacing:.5,textTransform:"uppercase",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},label)),
+    h("div",{style:{fontSize:22,fontWeight:800,color:tint||D.text,marginTop:8,lineHeight:1.05,whiteSpace:"nowrap",overflow:"hidden"}},value),
+    trend&&h("div",{style:{marginTop:5,display:"flex",alignItems:"center",gap:4,fontSize:11,color:trend.color,fontWeight:600}},icon(trend.dir==="up"?"TrendingUp":trend.dir==="down"?"TrendingDown":null,12,trend.color),trend.text));
 }
 
-/* MetricGrid */
-function MetricGrid({ items }) {
-  return h("div", {
-    style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(84px, 1fr))", gap: 10 }
-  }, ...items.map(([l, v, col]) =>
-    h("div", { key: l, style: { minWidth: 0 } },
-      h("div", { style: { fontSize: 9.5, color: D.faint, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 } }, l),
-      h("div", { style: { fontSize: 13.5, fontWeight: 700, color: col || D.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 } }, v),
-    )
-  ));
+/* ================================================================ */
+/* METRIC GRID (para campañas/anuncios)                              */
+/* ================================================================ */
+function MetricGrid({items}){
+  return h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(84px,1fr))",gap:10}},
+    ...items.map(function(x){return h("div",{key:x[0],style:{minWidth:0}},h("div",{style:{fontSize:9.5,color:D.faint,textTransform:"uppercase",letterSpacing:.3,fontWeight:600}},x[0]),h("div",{style:{fontSize:13.5,fontWeight:700,color:x[2]||D.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginTop:2}},x[1]))}));
 }
 
-/* Fila de creativo con thumbnail */
-function CreativeRow({ ad, cur }) {
-  const active = /activ/i.test(ad.status || "");
-  return h("div", { style: { background: D.card, border: `1px solid ${D.lineSoft}`, borderRadius: 12, overflow: "hidden" } },
-    h("div", { style: { display: "flex", gap: 0 } },
-      /* Thumbnail */
+/* ================================================================ */
+/* CREATIVE ROW (con thumbnail)                                      */
+/* ================================================================ */
+function CreativeRow({ad,cur}){
+  const active=/activ/i.test(ad.status||"");
+  return h("div",{style:{background:D.card,border:`1px solid ${D.lineSoft}`,borderRadius:12,overflow:"hidden"}},
+    h("div",{style:{display:"flex",gap:0}},
       ad.thumbnail_url
-        ? h("div", { style: { width: 80, flexShrink: 0, background: D.lineSoft, position: "relative" } },
-            h("img", { src: ad.thumbnail_url, style: { width: "100%", height: "100%", objectFit: "cover", display: "block" }, onError: e => { e.target.style.display="none"; } }),
-          )
-        : h("div", { style: { width: 80, flexShrink: 0, background: D.lineSoft, display: "flex", alignItems: "center", justifyContent: "center" } },
-            icon("Image", 22, D.faint),
-          ),
-      /* Contenido */
-      h("div", { style: { flex: 1, padding: "12px 14px", minWidth: 0 } },
-        h("div", { style: { display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 10 } },
-          h("span", { style: { fontSize: 13, fontWeight: 700, color: D.text, overflow: "hidden", textOverflow: "ellipsis", flex: 1, lineHeight: 1.3 } }, ad.name || "Anuncio sin nombre"),
-          h("div", { style: { display: "flex", gap: 4, flexShrink: 0 } },
-            ad.format && h("span", { style: { fontSize: 9, fontWeight: 700, color: D.dim, background: D.lineSoft, padding: "2px 6px", borderRadius: 4, textTransform: "uppercase" } }, ad.format),
-            h("span", { style: { fontSize: 9, fontWeight: 700, color: active ? D.green : D.faint, background: active ? D.greenSoft : D.lineSoft, padding: "2px 6px", borderRadius: 4 } }, active ? "ON" : "OFF"),
-          ),
-        ),
-        /* Stats en grid compacto */
-        h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))", gap: 8 } },
-          ...[
-            ["Gasto", cellMoney(ad.spend, cur), D.orange],
-            ["Conv.", heroNum(ad.conversations), null],
-            ["C/msj", cellCost(ad.cost_per_msg, cur), null],
-            ["Alcance", heroNum(ad.reach), null],
-            ["Impr.", heroNum(ad.impressions), null],
-            ["CTR", pct(ad.ctr), toNum(ad.ctr) >= 1 ? D.green : null],
-          ].map(([l, v, col]) =>
-            h("div", { key: l, style: { minWidth: 0 } },
-              h("div", { style: { fontSize: 9, color: D.faint, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 } }, l),
-              h("div", { style: { fontSize: 13, fontWeight: 700, color: col || D.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 } }, v),
-            )
-          ),
-        ),
-      ),
-    ),
-  );
+        ?h("div",{style:{width:80,flexShrink:0,background:D.lineSoft,position:"relative"}},h("img",{src:ad.thumbnail_url,style:{width:"100%",height:"100%",objectFit:"cover",display:"block"},onError:function(e){e.target.style.display="none"}}))
+        :h("div",{style:{width:80,flexShrink:0,background:D.lineSoft,display:"flex",alignItems:"center",justifyContent:"center"}},icon("Image",22,D.faint)),
+      h("div",{style:{flex:1,padding:"12px 14px",minWidth:0}},
+        h("div",{style:{display:"flex",alignItems:"flex-start",gap:6,marginBottom:10}},
+          h("span",{style:{fontSize:13,fontWeight:700,color:D.text,overflow:"hidden",textOverflow:"ellipsis",flex:1,lineHeight:1.3}},ad.name||"Anuncio sin nombre"),
+          h("div",{style:{display:"flex",gap:4,flexShrink:0}},
+            ad.format&&h("span",{style:{fontSize:9,fontWeight:700,color:D.dim,background:D.lineSoft,padding:"2px 6px",borderRadius:4,textTransform:"uppercase"}},ad.format),
+            h("span",{style:{fontSize:9,fontWeight:700,color:active?D.green:D.faint,background:active?D.greenSoft:D.lineSoft,padding:"2px 6px",borderRadius:4}},active?"ON":"OFF"))),
+        h(MetricGrid,{items:[["Gasto",heroMoney(ad.spend,cur),D.orange],["Conv.",heroNum(ad.conversations)],["C/msj",heroCost(ad.cost_per_msg,cur)],["Alcance",heroNum(ad.reach)],["Impr.",heroNum(ad.impressions)],["CTR",pct(ad.ctr),toNum(ad.ctr)>=1?D.green:null]]}))));
 }
 
-/* Sección de audiencia con visualizaciones */
-function AudienceSection({ campaignId, range }) {
-  const [state, setState] = useState("idle");
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
-
-  const load = async () => {
-    setState("loading"); setErr(null);
-    try {
-      const params = new URLSearchParams({ range: range.key });
-      if (range.key === "custom") { params.set("from", range.from); params.set("to", range.to); }
-      const d = await apiFetch(`/api/campaign/${campaignId}/audience?${params}`);
-      setData(d); setState("done");
-    } catch(e) { setErr(e.message); setState("error"); }
+/* ================================================================ */
+/* AUDIENCE SECTION                                                  */
+/* ================================================================ */
+function AudienceSection({campaignId,range}){
+  const[st,setSt]=useState("idle");
+  const[data,setData]=useState(null);
+  const[err,setErr]=useState(null);
+  const load=async()=>{
+    setSt("loading");setErr(null);
+    try{
+      const p=new URLSearchParams({range:range.key});
+      if(range.key==="custom"){p.set("from",range.from);p.set("to",range.to)}
+      const d=await apiFetch(`/api/campaign/${campaignId}/audience?${p}`);
+      setData(d);setSt("done");
+    }catch(e){setErr(e.message);setSt("error")}
   };
+  const PINK="#C13584",BLUE="#4267B2",PURPLE="#8B5CF6",TEAL="#0EA5E9";
+  const platColor=function(p){if(/instagram/i.test(p))return PINK;if(/facebook/i.test(p))return BLUE;if(/audience/i.test(p))return PURPLE;return TEAL};
+  const genColor=function(l){return/mujer/i.test(l)?PINK:/hombre/i.test(l)?BLUE:D.dim};
 
-  const PINK = "#C13584";
-  const BLUE = "#4267B2";
-  const PURPLE = "#8B5CF6";
-  const TEAL = "#0EA5E9";
+  if(st==="idle")return h("div",{style:{marginTop:12}},h("button",{onClick:load,style:{display:"inline-flex",alignItems:"center",gap:7,background:D.lineSoft,border:`1px solid ${D.line}`,color:D.dim,borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}},icon("PieChart",13,D.dim),"Ver audiencia"));
+  if(st==="loading")return h("div",{style:{marginTop:12,display:"flex",alignItems:"center",gap:8,color:D.dim,fontSize:12.5,padding:"12px 0"}},h("span",{className:"spin"},icon("Loader2",14,D.dim)),"Trayendo audiencia\u2026");
+  if(st==="error")return h("div",{style:{marginTop:12,color:D.red,fontSize:12}},err);
+  if(!data)return null;
 
-  const platformColor = p => {
-    if (/instagram/i.test(p)) return PINK;
-    if (/facebook/i.test(p)) return BLUE;
-    if (/audience/i.test(p)) return PURPLE;
-    return TEAL;
-  };
+  const Bar=function(label,p,color){return h("div",{key:label,style:{marginBottom:8}},h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:3}},h("span",{style:{fontSize:11.5,color:D.text,fontWeight:600}},label),h("span",{style:{fontSize:11.5,color:color||D.orange,fontWeight:700}},p+"%")),h("div",{style:{height:6,background:D.lineSoft,borderRadius:3,overflow:"hidden"}},h("div",{style:{height:"100%",width:p+"%",background:color||D.orange,borderRadius:3}})))};
+  const Sec=function(title){var children=Array.prototype.slice.call(arguments,1);return h("div",{style:{background:D.card,border:`1px solid ${D.line}`,borderRadius:12,padding:"12px 14px"}},h("div",{style:{fontSize:10,fontWeight:800,color:D.faint,letterSpacing:.5,textTransform:"uppercase",marginBottom:10}},title),...children)};
+  const has=function(a){return a&&a.length>0};
 
-  const genderColor = l => /mujer/i.test(l) ? PINK : /hombre/i.test(l) ? BLUE : D.dim;
-
-  if (state === "idle") return h("div", { style: { marginTop: 12 } },
-    h("button", {
-      onClick: load,
-      style: { display: "inline-flex", alignItems: "center", gap: 7, background: D.lineSoft, border: `1px solid ${D.line}`, color: D.dim, borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" },
-    }, icon("PieChart", 13, D.dim), "Ver audiencia"),
-  );
-
-  if (state === "loading") return h("div", { style: { marginTop: 12, display: "flex", alignItems: "center", gap: 8, color: D.dim, fontSize: 12.5, padding: "12px 0" } },
-    h("span", { className: "spin" }, icon("Loader2", 14, D.dim)), "Trayendo datos de audiencia…"
-  );
-
-  if (state === "error") return h("div", { style: { marginTop: 12, color: D.red, fontSize: 12 } },
-    err, " ", h("button", { onClick: load, style: { color: D.orange, background: "none", border: "none", cursor: "pointer", fontWeight: 700 } }, "Reintentar")
-  );
-
-  if (!data) return null;
-
-  // Donut SVG para género
-  const DonutChart = ({ items }) => {
-    const total = items.reduce((s, i) => s + i.pct, 0) || 1;
-    let offset = 0;
-    const R = 40, CX = 50, CY = 50, stroke = 14;
-    const circumference = 2 * Math.PI * R;
-    const segments = items.map((item, i) => {
-      const dash = (item.pct / 100) * circumference;
-      const gap = circumference - dash;
-      const seg = h("circle", {
-        key: i, cx: CX, cy: CY, r: R,
-        fill: "none", stroke: genderColor(item.label),
-        strokeWidth: stroke,
-        strokeDasharray: `${dash} ${gap}`,
-        strokeDashoffset: -offset * circumference / 100,
-        style: { transition: "stroke-dasharray 0.5s" },
-      });
-      offset += item.pct;
-      return seg;
-    });
-    return h("svg", { viewBox: "0 0 100 100", width: 90, height: 90, style: { transform: "rotate(-90deg)" } }, ...segments);
-  };
-
-  // Barra horizontal
-  const Bar = ({ label, pct: p, color, extra }) =>
-    h("div", { style: { marginBottom: 8 } },
-      h("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 3 } },
-        h("span", { style: { fontSize: 11.5, color: D.text, fontWeight: 600 } }, label),
-        h("span", { style: { fontSize: 11.5, color: color || D.orange, fontWeight: 700 } }, `${p}%`),
-      ),
-      h("div", { style: { height: 6, background: D.lineSoft, borderRadius: 3, overflow: "hidden" } },
-        h("div", { style: { height: "100%", width: `${p}%`, background: color || D.orange, borderRadius: 3, transition: "width 0.5s" } }),
-      ),
-      extra && h("div", { style: { fontSize: 10, color: D.faint, marginTop: 2 } }, extra),
-    );
-
-  const Section = ({ title }, ...children) =>
-    h("div", { style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: "12px 14px" } },
-      h("div", { style: { fontSize: 10, fontWeight: 800, color: D.faint, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 10 } }, title),
-      ...children,
-    );
-
-  const hasData = arr => arr && arr.length > 0;
-
-  return h("div", { style: { marginTop: 14 } },
-    h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 } },
-      icon("PieChart", 13, D.orange),
-      h("span", { style: { fontSize: 11, fontWeight: 800, color: D.text, letterSpacing: 0.4, textTransform: "uppercase" } }, "AUDIENCIA"),
-      h("button", {
-        onClick: () => { setData(null); setState("idle"); },
-        style: { marginLeft: "auto", background: "none", border: "none", color: D.faint, cursor: "pointer", fontSize: 11 },
-      }, "Ocultar"),
-    ),
-    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 } },
-
-      /* Género */
-      hasData(data.gender) && Section( { title: "Género" },
-        h("div", { style: { display: "flex", alignItems: "center", gap: 14 } },
-          DonutChart({ items: data.gender }),
-          h("div", { style: { flex: 1 } },
-            ...data.gender.map(g =>
-              h("div", { key: g.label, style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 8 } },
-                h("div", { style: { width: 10, height: 10, borderRadius: "50%", background: genderColor(g.label), flexShrink: 0 } }),
-                h("div", null,
-                  h("div", { style: { fontSize: 12.5, fontWeight: 700, color: D.text } }, `${g.pct}%`),
-                  h("div", { style: { fontSize: 10.5, color: D.faint } }, g.label),
-                ),
-              )
-            ),
-          ),
-        ),
-      ),
-
-      /* Edad */
-      hasData(data.age) && Section( { title: "Edad" },
-        ...data.age.map(a => Bar({ key: a.label, label: a.label, pct: a.pct, color: D.orange })),
-      ),
-
-      /* Plataforma */
-      hasData(data.platform) && Section( { title: "Plataforma" },
-        ...data.platform.map(p => Bar({ key: p.label, label: p.label, pct: p.pct, color: platformColor(p.label) })),
-      ),
-
-      /* Regiones */
-      hasData(data.region) && Section( { title: "Ciudades / Provincias" },
-        ...data.region.map(r => Bar({ key: r.label, label: r.label, pct: r.pct, color: TEAL })),
-      ),
-    ),
-  );
+  return h("div",{style:{marginTop:14}},
+    h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:10}},icon("PieChart",13,D.orange),h("span",{style:{fontSize:11,fontWeight:800,color:D.text,letterSpacing:.4,textTransform:"uppercase"}},"AUDIENCIA"),h("button",{onClick:function(){setData(null);setSt("idle")},style:{marginLeft:"auto",background:"none",border:"none",color:D.faint,cursor:"pointer",fontSize:11}},"Ocultar")),
+    h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}},
+      has(data.gender)&&Sec("G\u00e9nero",...data.gender.map(function(g){return h("div",{key:g.label,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6}},h("div",{style:{width:10,height:10,borderRadius:"50%",background:genColor(g.label),flexShrink:0}}),h("span",{style:{fontSize:12.5,fontWeight:700,color:D.text}},g.pct+"%"),h("span",{style:{fontSize:11,color:D.faint}},g.label))})),
+      has(data.age)&&Sec("Edad",...data.age.map(function(a){return Bar(a.label,a.pct,D.orange)})),
+      has(data.platform)&&Sec("Plataforma",...data.platform.map(function(p){return Bar(p.label,p.pct,platColor(p.label))})),
+      has(data.region)&&Sec("Ciudades",...data.region.map(function(r){return Bar(r.label,r.pct,TEAL)}))));
 }
 
-/* Tarjeta de campaña con drill-down */
-function CampaignCard({ c, cur, range }) {
-  const [expanded, setExpanded] = useState(null);
-  const active = /activ/i.test(c.status || "");
-
-  const toggle = async () => {
-    if (expanded) { setExpanded(null); return; }
-    if (!c.id) return;
-    setExpanded({ state: "loading" });
-    try {
-      const params = new URLSearchParams({ range: range.key });
-      if (range.key === "custom") { params.set("from", range.from); params.set("to", range.to); }
-      const data = await apiFetch(`/api/campaign/${c.id}/ads?${params}`);
-      setExpanded({ state: "done", data });
-    } catch (e) {
-      setExpanded({ state: "error", error: e.message });
-    }
+/* ================================================================ */
+/* CAMPAIGN CARD                                                     */
+/* ================================================================ */
+function CampaignCard({c,cur,range}){
+  const[expanded,setExpanded]=useState(null);
+  const active=/activ/i.test(c.status||"");
+  const toggle=async function(){
+    if(expanded){setExpanded(null);return}
+    if(!c.id)return;
+    setExpanded({state:"loading"});
+    try{
+      const p=new URLSearchParams({range:range.key});
+      if(range.key==="custom"){p.set("from",range.from);p.set("to",range.to)}
+      const data=await apiFetch(`/api/campaign/${c.id}/ads?${p}`);
+      setExpanded({state:"done",data});
+    }catch(e){setExpanded({state:"error",error:e.message})}
   };
-
-  return h("div", {
-    style: { background: D.surface, border: `1px solid ${expanded?.state === "done" ? D.orange : D.lineSoft}`, borderRadius: 14, overflow: "hidden", transition: "border-color 0.2s" }
-  },
-    /* Header campaña */
-    h("div", { onClick: toggle, style: { padding: "14px 16px", cursor: "pointer" } },
-      h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
-        h("span", { style: { width: 8, height: 8, borderRadius: "50%", background: active ? D.green : D.faint, flexShrink: 0 } }),
-        h("span", { style: { fontSize: 14, fontWeight: 700, color: D.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } }, c.name || "Campaña sin nombre"),
-        c.objective && h("span", { style: { fontSize: 9.5, fontWeight: 700, color: D.dim, background: D.lineSoft, padding: "2px 7px", borderRadius: 5, textTransform: "uppercase" } }, c.objective),
-        h("span", { style: { fontSize: 10, fontWeight: 700, color: active ? D.green : D.faint, background: active ? D.greenSoft : D.lineSoft, padding: "2px 7px", borderRadius: 6 } }, active ? "ACTIVA" : "PAUSADA"),
-        icon(expanded ? "ChevronDown" : "ChevronRight", 16, D.faint),
-      ),
-      /* Stats grandes igual al hero */
-      h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 } },
-        ...[
-          ["DollarSign", "Gasto", cellMoney(c.spend, cur), D.orange],
-          ["MessageCircle", "Conversac.", heroNum(c.conversations), null],
-          ["Target", "Costo/msj", cellCost(c.cost_per_msg, cur), null],
-          ["Users", "Alcance", heroNum(c.reach), null],
-          ["Eye", "Impresiones", heroNum(c.impressions), null],
-          ["MousePointerClick", "CTR", pct(c.ctr), toNum(c.ctr) >= 1 ? D.green : null],
-        ].map(([ic, label, value, tint]) =>
-          h("div", { key: label, style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 10, padding: "10px 12px", minWidth: 0 } },
-            h("div", { style: { display: "flex", alignItems: "center", gap: 5, color: D.dim, marginBottom: 5 } },
-              icon(ic, 11), h("span", { style: { fontSize: 9.5, letterSpacing: 0.4, textTransform: "uppercase", fontWeight: 600 } }, label),
-            ),
-            h("div", { style: { fontSize: 17, fontWeight: 800, color: tint || D.text, whiteSpace: "nowrap", overflow: "hidden" } }, value),
-          )
-        ),
-      ),
-    ),
-    /* Drill-down anuncios */
-    expanded && h("div", { style: { borderTop: `1px solid ${D.lineSoft}`, background: D.bg, padding: "14px 16px" } },
-      /* Audiencia */
-      h(AudienceSection, { campaignId: c.id, range }),
-      h("div", { style: { marginTop: 14, display: "flex", alignItems: "center", gap: 7, marginBottom: 12 } },
-        icon("Image", 12, D.orange),
-        h("span", { style: { fontSize: 11, fontWeight: 800, color: D.text, letterSpacing: 0.4 } }, "ANUNCIOS"),
-        expanded.data && h("span", { style: { fontSize: 10.5, color: D.faint } }, `(${(expanded.data.ads||[]).length})`),
-      ),
-      expanded.state === "loading" && h("div", { style: { display: "flex", alignItems: "center", gap: 8, color: D.dim, fontSize: 12.5, padding: "16px 0" } },
-        h("span", { className: "spin" }, icon("Loader2", 14, D.dim)), " Trayendo anuncios…"
-      ),
-      expanded.state === "error" && h("div", { style: { color: D.red, fontSize: 12.5 } }, expanded.error),
-      expanded.state === "done" && expanded.data && h("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
-        ...(expanded.data.ads || []).map((ad, i) => h(CreativeRow, { key: ad.id || i, ad, cur: expanded.data.currency || cur })),
-        (!expanded.data.ads || expanded.data.ads.length === 0) && h("div", { style: { fontSize: 12.5, color: D.faint } }, "Sin anuncios con datos en este período."),
-      ),
-    ),
-  );
+  return h("div",{style:{background:D.surface,border:`1px solid ${expanded&&expanded.state==="done"?D.orange:D.lineSoft}`,borderRadius:14,overflow:"hidden"}},
+    h("div",{onClick:toggle,style:{padding:"14px 16px",cursor:"pointer"}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12}},
+        h("span",{style:{width:8,height:8,borderRadius:"50%",background:active?D.green:D.faint,flexShrink:0}}),
+        h("span",{style:{fontSize:14,fontWeight:700,color:D.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}},c.name||"Campa\u00f1a sin nombre"),
+        c.objective&&h("span",{style:{fontSize:9.5,fontWeight:700,color:D.dim,background:D.lineSoft,padding:"2px 7px",borderRadius:5,textTransform:"uppercase"}},c.objective),
+        h("span",{style:{fontSize:10,fontWeight:700,color:active?D.green:D.faint,background:active?D.greenSoft:D.lineSoft,padding:"2px 7px",borderRadius:6}},active?"ACTIVA":"PAUSADA"),
+        icon(expanded?"ChevronDown":"ChevronRight",16,D.faint)),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8}},
+        ...[["DollarSign","Gasto",heroMoney(c.spend,cur),D.orange],["MessageCircle","Conv.",heroNum(c.conversations),null],["Target","C/msj",heroCost(c.cost_per_msg,cur),null],["Users","Alcance",heroNum(c.reach),null],["Eye","Impr.",heroNum(c.impressions),null],["MousePointerClick","CTR",pct(c.ctr),toNum(c.ctr)>=1?D.green:null]].map(function(x){return h("div",{key:x[1],style:{background:D.card,border:`1px solid ${D.line}`,borderRadius:10,padding:"10px 12px",minWidth:0}},h("div",{style:{display:"flex",alignItems:"center",gap:5,color:D.dim,marginBottom:5}},icon(x[0],11),h("span",{style:{fontSize:9.5,letterSpacing:.4,textTransform:"uppercase",fontWeight:600}},x[1])),h("div",{style:{fontSize:17,fontWeight:800,color:x[3]||D.text,whiteSpace:"nowrap",overflow:"hidden"}},x[2]))}))),
+    expanded&&h("div",{style:{borderTop:`1px solid ${D.lineSoft}`,background:D.bg,padding:"14px 16px"}},
+      h(AudienceSection,{campaignId:c.id,range}),
+      h("div",{style:{marginTop:14,display:"flex",alignItems:"center",gap:7,marginBottom:12}},icon("Image",12,D.orange),h("span",{style:{fontSize:11,fontWeight:800,color:D.text,letterSpacing:.4}},"ANUNCIOS"),expanded.data&&h("span",{style:{fontSize:10.5,color:D.faint}},"("+(expanded.data.ads||[]).length+")")),
+      expanded.state==="loading"&&h("div",{style:{display:"flex",alignItems:"center",gap:8,color:D.dim,fontSize:12.5,padding:"16px 0"}},h("span",{className:"spin"},icon("Loader2",14,D.dim))," Trayendo anuncios\u2026"),
+      expanded.state==="error"&&h("div",{style:{color:D.red,fontSize:12.5}},expanded.error),
+      expanded.state==="done"&&expanded.data&&h("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+        ...(expanded.data.ads||[]).map(function(ad,i){return h(CreativeRow,{key:ad.id||i,ad,cur:expanded.data.currency||cur})}),
+        (!expanded.data.ads||expanded.data.ads.length===0)&&h("div",{style:{fontSize:12.5,color:D.faint}},"Sin anuncios con datos en este per\u00edodo."))));
 }
 
-
-/* ================================================================== */
-/* Pantalla principal unificada: buscador + tabla general */
-const ALL_ACCOUNTS_FALLBACK = []; // se carga dinámicamente desde el servidor
-
-function Home({ onOpen }) {
-  const [q, setQ] = useState("");
-  const [accounts, setAccounts] = useState([]);
-  const [metrics, setMetrics] = useState({});
-  const [settings, setSettings] = useState({}); // { accountId: { budget, targetCPM, targetCPC, taskDone, taskWeek } }
-  const [loading, setLoading] = useState(false);
-  const [extraCols, setExtraCols] = useState(false);
-  const [editBudget, setEditBudget] = useState(null);
-  const [budgetInput, setBudgetInput] = useState("");
-  const [pinned, setPinned] = useState(() => { try { return JSON.parse(localStorage.getItem("cc_pinned")||"[]"); } catch { return []; } });
-
-  // Semana actual ISO para auto-reset de tareas
-  const currentWeek = (() => {
-    const d = new Date();
-    const jan1 = new Date(d.getFullYear(), 0, 1);
-    const wk = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
-    return `${d.getFullYear()}-W${String(wk).padStart(2,"0")}`;
-  })();
-
-  // Cargar cuentas y settings del servidor al iniciar
-  useEffect(() => {
-    apiFetch("/api/accounts").then(accs => { if (accs && accs.length) setAccounts(accs); }).catch(() => {});
-    apiFetch("/api/settings").then(s => setSettings(s || {})).catch(() => {});
-  }, []);
-
-  const updateSetting = async (id, key, val) => {
-    const current = settings[id] || {};
-    const updated = { ...current, [key]: val };
-    setSettings(prev => ({ ...prev, [id]: updated }));
-    apiFetch(`/api/settings/${id}`, { method: "POST", body: JSON.stringify(updated) }).catch(() => {});
-  };
-
-  const saveBudget = (id, val) => updateSetting(id, "budget", val === "" ? null : +val);
-  const getSetting = (id, key) => (settings[id] || {})[key] || null;
-
-  const togglePin = (id) => {
-    const nx = pinned.includes(id) ? pinned.filter(x=>x!==id) : [...pinned, id];
-    setPinned(nx);
-    localStorage.setItem("cc_pinned", JSON.stringify(nx));
-  };
-
-  const loadAll = async () => {
-    setLoading(true);
-    try {
-      const data = await apiFetch("/api/overview", {
-        method: "POST",
-        body: JSON.stringify({ accounts: accounts.map(a=>a.id), range: "d7" }),
-      });
-      setMetrics(data);
-    } catch(e) { console.error("Overview error:", e); }
-    setLoading(false);
-  };
-
-  // Cargar métricas cuando las cuentas estén disponibles
-  useEffect(() => { if (accounts.length > 0) loadAll(); }, [accounts.length]);
-
-  // Filtrar por búsqueda, fijadas primero
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    let rows = s ? accounts.filter(a => a.name.toLowerCase().includes(s) || a.id.includes(s)) : accounts;
-    return [...rows].sort((a,b) => {
-      const pa = pinned.includes(a.id) ? 0 : 1, pb = pinned.includes(b.id) ? 0 : 1;
-      if (pa !== pb) return pa - pb;
-      // Ordenar por gasto descendente
-      const sa = parseFloat(metrics[a.id]?.account?.spend||0);
-      const sb = parseFloat(metrics[b.id]?.account?.spend||0);
-      return sb - sa;
-    });
-  }, [q, metrics, pinned]);
-
-  const statusInfo = (m) => {
-    if (!m || m.error) return { color: D.faint, bg: D.lineSoft, label: "Sin datos" };
-    if (toNum(m.account?.spend) > 0) return { color: D.green, bg: D.greenSoft, label: "Activa" };
-    return { color: D.amber, bg: D.amberSoft, label: "Sin actividad" };
-  };
-
-  const pctBudget = (spend, budget) => {
-    if (!budget || !spend) return null;
-    return Math.round(toNum(spend) / budget * 100);
-  };
-
-  const pctColor = (p) => {
-    if (p == null) return D.faint;
-    if (p > 100) return D.red;
-    if (p > 80) return D.amber;
-    return D.green;
-  };
-
-  // Objetivos compartidos desde el servidor
-  const getTargetCPM = (id) => getSetting(id, "targetCPM");
-  const getTargetCPC = (id) => getSetting(id, "targetCPC");
-  const cpmColor = (id, val) => { const t = getTargetCPM(id); if (t && val > t) return D.red; return D.text; };
-  const cpcColor = (id, val) => { const t = getTargetCPC(id); if (t && val > t) return D.red; return D.text; };
-  const calcCPC = (acc) => toNum(acc.clicks) > 0 ? toNum(acc.spend) / toNum(acc.clicks) : 0;
-
-  const TH = { padding: "6px 8px", fontSize: 9.5, fontWeight: 700, color: D.faint, textTransform: "uppercase", letterSpacing: 0.3, borderBottom: `1px solid ${D.line}`, whiteSpace: "nowrap", background: D.surface, textAlign: "right" };
-  const TH_L = { ...TH, textAlign: "left" };
-  const TD = { padding: "7px 8px", fontSize: 12, color: D.text, borderBottom: `1px solid ${D.lineSoft}`, whiteSpace: "nowrap", textAlign: "right" };
-  const TD_L = { ...TD, textAlign: "left" };
-
-  return h("div", null,
-    /* Buscador */
-    h("div", { style: { display: "flex", alignItems: "center", gap: 8, background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: "0 12px", marginBottom: 14 } },
-      icon("Search", 16, D.faint),
-      h("input", { value: q, onChange: e => setQ(e.target.value), placeholder: "Buscar cliente por nombre…", style: { border: "none", outline: "none", background: "transparent", color: D.text, fontSize: 14, padding: "12px 0", width: "100%", fontFamily: "inherit" } }),
-      q && h("button", { onClick: () => setQ(""), style: { background: "none", border: "none", color: D.faint, cursor: "pointer" } }, icon("X", 14, D.faint)),
-    ),
-
-    /* Controles de tabla */
-    h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" } },
-      h("div", { style: { fontSize: 11.5, color: D.faint } }, `${filtered.length} cuentas · últimos 7 días`),
-      h("div", { style: { marginLeft: "auto", display: "flex", gap: 6 } },
-        h("button", { onClick: () => setExtraCols(v=>!v), style: { fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 8, border: `1px solid ${D.line}`, background: extraCols ? D.orangeSoft : D.card, color: extraCols ? D.orange : D.dim, cursor: "pointer" } },
-          extraCols ? "− Ocultar Instagram" : "+ Columnas Instagram"
-        ),
-        h("button", { onClick: loadAll, disabled: loading, style: { fontSize: 11.5, fontWeight: 700, padding: "5px 11px", borderRadius: 8, border: `1px solid ${D.line}`, background: D.card, color: D.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, opacity: loading ? 0.6 : 1 } },
-          loading ? h("span", { className: "spin" }, icon("Loader2", 13, D.faint)) : icon("RefreshCw", 13), loading ? "Actualizando…" : "Actualizar"
-        ),
-      ),
-    ),
-
-    /* Tabla */
-    h("div", { style: { overflowX: "auto", borderRadius: 12, border: `1px solid ${D.line}` } },
-      h("table", { style: { width: "100%", borderCollapse: "collapse", tableLayout: "auto" } },
-        h("thead", null,
-          h("tr", null,
-            h("th", { style: { ...TH_L, position: "sticky", left: 0, zIndex: 2, minWidth: 36, padding: "6px 4px" } }, ""),
-            h("th", { style: { ...TH_L, position: "sticky", left: 36, zIndex: 2, minWidth: 120 } }, "Cliente"),
-            h("th", { style: { ...TH, textAlign: "center" } }, "Estado"),
-            h("th", { style: TH }, "Gasto 7d"),
-            h("th", { style: TH }, "Presupuesto"),
-            h("th", { style: TH }, "% Ejec."),
-            h("th", { style: TH }, "Conversac."),
-            h("th", { style: TH }, "Costo/msj"),
-            h("th", { style: TH }, "Costo/clic"),
-            h("th", { style: TH }, "CTR"),
-            h("th", { style: TH }, "Alcance"),
-            h("th", { style: TH }, "Impresiones"),
-            h("th", { style: { ...TH, textAlign: "center", minWidth: 60 } }, "Tarea"),
-            extraCols && h("th", { style: TH }, "Seg. IG"),
-            extraCols && h("th", { style: TH }, "Visitas IG"),
-          ),
-        ),
-        h("tbody", null,
-          ...filtered.map((a, idx) => {
-            const m = metrics[a.id];
-            const acc = m?.account || {};
-            const st = statusInfo(m);
-            const budget = getSetting(a.id, "budget");
-            const pctExec = pctBudget(acc.spend, budget);
-            const isPinned = pinned.includes(a.id);
-            const isEven = idx % 2 === 0;
-            const rowBg = isEven ? D.surface : D.card;
-
-            return h("tr", {
-              key: a.id,
-              style: { cursor: "pointer", background: rowBg },
-              onMouseEnter: e => e.currentTarget.style.background = D.cardHi,
-              onMouseLeave: e => e.currentTarget.style.background = rowBg,
-            },
-              /* Pin */
-              h("td", { style: { ...TD_L, position: "sticky", left: 0, background: rowBg, zIndex: 1, padding: "7px 4px" }, onClick: e => { e.stopPropagation(); togglePin(a.id); } },
-                h("span", { style: { color: isPinned ? D.orange : D.lineSoft, cursor: "pointer", fontSize: 14 } }, "★"),
-              ),
-              /* Nombre */
-              h("td", { style: { ...TD_L, fontWeight: 700, position: "sticky", left: 36, background: rowBg, zIndex: 1 }, onClick: () => onOpen(a.id) }, a.name),
-              /* Estado */
-              h("td", { style: { ...TD }, onClick: () => onOpen(a.id) },
-                m
-                  ? h("span", { style: { fontSize: 10.5, fontWeight: 700, color: st.color, background: st.bg, padding: "2px 8px", borderRadius: 10 } }, st.label)
-                  : h("span", { className: "spin", style: { display: "inline-block" } }, icon("Loader2", 11, D.faint)),
-              ),
-              /* Gasto */
-              h("td", { style: { ...TD, color: D.orange, fontWeight: 700 }, onClick: () => onOpen(a.id) }, m ? heroMoney(acc.spend, a.cur) : "—"),
-              /* Presupuesto editable */
-              h("td", { style: TD, onClick: e => e.stopPropagation() },
-                editBudget === a.id
-                  ? h("input", { autoFocus: true, type: "number", value: budgetInput, placeholder: "0", onChange: e => setBudgetInput(e.target.value), onBlur: () => { saveBudget(a.id, budgetInput); setEditBudget(null); }, onKeyDown: e => { if (e.key==="Enter") { saveBudget(a.id, budgetInput); setEditBudget(null); } }, style: { width: 80, background: D.bg, border: `1px solid ${D.orange}`, borderRadius: 6, color: D.text, fontSize: 12, padding: "3px 6px", outline: "none", textAlign: "right" } })
-                  : h("button", { onClick: () => { setEditBudget(a.id); setBudgetInput(getSetting(a.id,"budget")||""); }, style: { background: "none", border: `1px dashed ${D.line}`, borderRadius: 6, color: getSetting(a.id,"budget") ? D.dim : D.lineSoft, fontSize: 11, fontWeight: 600, padding: "1px 6px", cursor: "pointer" } }, getSetting(a.id,"budget") ? heroMoney(getSetting(a.id,"budget"), a.cur) : "+ agregar"),
-              ),
-              /* % ejecutado */
-              h("td", { style: { ...TD, fontWeight: 700, color: pctColor(pctExec) }, onClick: () => onOpen(a.id) },
-                pctExec != null ? `${pctExec}%${pctExec > 100 ? " ⚠" : ""}` : "—"
-              ),
-              /* Métricas */
-              h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.conversations) : "—"),
-              h("td", { style: { ...TD, color: m ? cpmColor(a.id, toNum(acc.cost_per_msg)) : D.text, fontWeight: m && cpmColor(a.id, toNum(acc.cost_per_msg)) === D.red ? 700 : 400 }, onClick: () => onOpen(a.id) }, m ? heroCost(acc.cost_per_msg, a.cur) : "—"),
-              h("td", { style: { ...TD, color: m ? cpcColor(a.id, calcCPC(acc)) : D.text, fontWeight: m && cpcColor(a.id, calcCPC(acc)) === D.red ? 700 : 400 }, onClick: () => onOpen(a.id) }, m && calcCPC(acc) > 0 ? heroCost(calcCPC(acc), a.cur) : "—"),
-              h("td", { style: { ...TD, color: toNum(acc.ctr) >= 1 ? D.green : D.text, fontWeight: toNum(acc.ctr) >= 1 ? 700 : 400 }, onClick: () => onOpen(a.id) }, m ? pct(acc.ctr) : "—"),
-              h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.reach) : "—"),
-              h("td", { style: TD, onClick: () => onOpen(a.id) }, m ? heroNum(acc.impressions) : "—"),
-              /* Tarea semanal — 3 estados: ○ → 🟡 → ✅ → ○ */
-              (() => {
-                const tw = getSetting(a.id, "taskWeek");
-                const ts = tw === currentWeek ? (getSetting(a.id, "taskStatus") || "none") : "none";
-                const nextStatus = { none: "pending", pending: "done", done: "none" };
-                return h("td", {
-                  style: { ...TD, textAlign: "center", padding: "9px 8px", cursor: "pointer", userSelect: "none" },
-                  onClick: e => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    const next = nextStatus[ts] || "pending";
-                    updateSetting(a.id, "taskStatus", next);
-                    updateSetting(a.id, "taskWeek", currentWeek);
-                  },
-                },
-                  ts === "done" ? h("span", { style: { fontSize: 15 } }, "✅")
-                  : ts === "pending" ? h("span", { style: { fontSize: 15 } }, "🟡")
-                  : h("span", { style: { fontSize: 14, color: D.lineSoft } }, "○"),
-                );
-              })(),
-              extraCols && h("td", { style: { ...TD, color: "#C13584" }, onClick: () => onOpen(a.id) }, m && toNum(acc.ig_follows)>0 ? heroNum(acc.ig_follows) : "—"),
-              extraCols && h("td", { style: { ...TD, color: "#C13584" }, onClick: () => onOpen(a.id) }, m && toNum(acc.ig_profile_visits)>0 ? heroNum(acc.ig_profile_visits) : "—"),
-            );
-          }),
-        ),
-      ),
-    ),
-    h("div", { style: { fontSize: 11, color: D.faint, marginTop: 8, textAlign: "center" } }, "Hacé clic en una fila para ver el detalle · ★ para fijar arriba"),
-  );
+/* ================================================================ */
+/* RANGE CONTROL                                                     */
+/* ================================================================ */
+function RangeControl({range,setRange}){
+  const[open,setOpen]=useState(false);
+  const isoToday=function(){return new Date().toISOString().slice(0,10)};
+  const isoDaysAgo=function(n){return new Date(Date.now()-n*864e5).toISOString().slice(0,10)};
+  const[from,setFrom]=useState(range.key==="custom"?range.from:isoDaysAgo(14));
+  const[to,setTo]=useState(range.key==="custom"?range.to:isoToday());
+  const ms=new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10);
+  const apply=function(){if(!from||!to||from>to)return;setRange({key:"custom",from,to});setOpen(false)};
+  const isC=range.key==="custom";
+  const inp=function(val,set,mn,mx){return h("input",{type:"date",value:val,min:mn,max:mx,onChange:function(e){set(e.target.value)},style:{flex:1,background:D.bg,border:`1px solid ${D.line}`,borderRadius:8,color:D.text,fontSize:12.5,padding:"7px 9px",outline:"none",fontFamily:"inherit",colorScheme:"dark"}})};
+  return h("div",{style:{position:"relative"}},
+    h("div",{style:{display:"inline-flex",gap:3,background:D.card,border:`1px solid ${D.line}`,borderRadius:10,padding:3}},
+      ...["d7","d30"].map(function(k){return h("button",{key:k,onClick:function(){setRange({key:k});setOpen(false)},style:{padding:"6px 11px",fontSize:12.5,fontWeight:700,borderRadius:8,border:"none",cursor:"pointer",background:range.key===k?D.orange:"transparent",color:range.key===k?"#fff":D.dim}},k==="d7"?"7 d\u00edas":"30 d\u00edas")}),
+      h("button",{onClick:function(){setOpen(!open)},style:{padding:"6px 10px",fontSize:12.5,fontWeight:700,borderRadius:8,border:"none",cursor:"pointer",background:isC?D.orange:"transparent",color:isC?"#fff":D.dim,display:"inline-flex",alignItems:"center",gap:5}},icon("Calendar",12),isC?range.from+"\u2192"+range.to:"Personalizado")),
+    open&&h("div",{style:{position:"absolute",top:"calc(100% + 6px)",right:0,background:D.card,border:`1px solid ${D.line}`,borderRadius:12,padding:12,zIndex:10,boxShadow:"0 12px 32px rgba(0,0,0,.4)",display:"flex",flexDirection:"column",gap:10,minWidth:280}},
+      h("div",{style:{fontSize:11,fontWeight:700,color:D.dim,letterSpacing:.3,textTransform:"uppercase"}},"Rango personalizado"),
+      h("div",{style:{display:"flex",gap:8,alignItems:"center"}},inp(from,setFrom,null,to||isoToday()),h("span",{style:{color:D.faint,fontSize:12}},"\u2192"),inp(to,setTo,from,isoToday())),
+      h("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},...[["Ayer",isoDaysAgo(1),isoDaysAgo(1)],["14 d\u00edas",isoDaysAgo(14),isoToday()],["Este mes",ms,isoToday()],["90 d\u00edas",isoDaysAgo(90),isoToday()]].map(function(x){return h("button",{key:x[0],onClick:function(){setFrom(x[1]);setTo(x[2])},style:{fontSize:11,fontWeight:600,padding:"5px 9px",borderRadius:6,border:`1px solid ${D.line}`,background:"transparent",color:D.dim,cursor:"pointer"}},x[0])})),
+      h("div",{style:{display:"flex",gap:8,justifyContent:"flex-end"}},h("button",{onClick:function(){setOpen(false)},style:{fontSize:12,fontWeight:700,padding:"7px 12px",borderRadius:8,border:`1px solid ${D.line}`,background:"transparent",color:D.dim,cursor:"pointer"}},"Cancelar"),h("button",{onClick:apply,style:{fontSize:12,fontWeight:700,padding:"7px 14px",borderRadius:8,border:"none",background:D.orange,color:"#fff",cursor:"pointer"}},"Aplicar"))));
 }
 
-
-/* RangeControl */
-function RangeControl({ range, setRange }) {
-  const [open, setOpen] = useState(false);
-  const [from, setFrom] = useState(range.key === "custom" ? range.from : isoDaysAgo(14));
-  const [to, setTo] = useState(range.key === "custom" ? range.to : isoToday());
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
-
-  const apply = () => {
-    if (!from || !to || from > to) return;
-    setRange({ key: "custom", from, to });
-    setOpen(false);
+/* ================================================================ */
+/* MONTHLY CHART (SVG)                                               */
+/* ================================================================ */
+function MonthlyChart({accountId,cur}){
+  const[st,setSt]=useState("idle");
+  const[data,setData]=useState(null);
+  const load=async function(){
+    setSt("loading");
+    try{const d=await apiFetch(`/api/account/${accountId}/monthly`);setData(d);setSt("done")}
+    catch(e){setSt("error")}
   };
+  useEffect(function(){load()},[accountId]);
+  if(st==="loading")return h("div",{style:{marginTop:16,textAlign:"center",color:D.dim,padding:"20px 0"}},h("span",{className:"spin"},icon("Loader2",16,D.dim))," Cargando gr\u00e1fico mensual\u2026");
+  if(st==="error"||!data||!data.length)return null;
 
-  const inp = (value, onChange, min, max) => h("input", {
-    type: "date", value, min, max, onChange: e => onChange(e.target.value),
-    style: { flex: 1, background: D.bg, border: `1px solid ${D.line}`, borderRadius: 8, color: D.text, fontSize: 12.5, padding: "7px 9px", outline: "none", fontFamily: "inherit", colorScheme: "dark" },
-  });
+  const W=700,H=220,PL=60,PR=20,PT=30,PB=50;
+  const cw=W-PL-PR,ch=H-PT-PB;
+  const n=data.length;
+  const maxConv=Math.max(...data.map(function(d){return d.conversations||0}),1);
+  const maxCPM=Math.max(...data.map(function(d){return d.cost_per_msg||0}),1);
+  const xStep=cw/(n-1||1);
 
-  return h("div", { style: { position: "relative" } },
-    h("div", { style: { display: "inline-flex", gap: 3, background: D.card, border: `1px solid ${D.line}`, borderRadius: 10, padding: 3 } },
-      ...["d7","d30"].map(k => h("button", {
-        key: k, onClick: () => { setRange({ key: k }); setOpen(false); },
-        style: { padding: "6px 11px", fontSize: 12.5, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", background: range.key === k ? D.orange : "transparent", color: range.key === k ? "#fff" : D.dim },
-      }, k === "d7" ? "7 días" : "30 días")),
-      h("button", {
-        onClick: () => setOpen(v => !v),
-        style: { padding: "6px 10px", fontSize: 12.5, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", background: range.key === "custom" ? D.orange : "transparent", color: range.key === "custom" ? "#fff" : D.dim, display: "inline-flex", alignItems: "center", gap: 5 },
-      }, icon("Calendar", 12), range.key === "custom" ? `${range.from} → ${range.to}` : "Personalizado"),
-    ),
-    open && h("div", {
-      style: { position: "absolute", top: "calc(100% + 6px)", right: 0, background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: 12, zIndex: 10, boxShadow: "0 12px 32px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column", gap: 10, minWidth: 280 },
-    },
-      h("div", { style: { fontSize: 11, fontWeight: 700, color: D.dim, letterSpacing: 0.3, textTransform: "uppercase" } }, "Rango personalizado"),
-      h("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
-        inp(from, setFrom, null, to || isoToday()),
-        h("span", { style: { color: D.faint, fontSize: 12 } }, "→"),
-        inp(to, setTo, from, isoToday()),
-      ),
-      h("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
-        ...[ ["Ayer", isoDaysAgo(1), isoDaysAgo(1)], ["14 días", isoDaysAgo(14), isoToday()], ["Este mes", monthStart, isoToday()], ["90 días", isoDaysAgo(90), isoToday()] ]
-        .map(([lbl, f, t]) => h("button", {
-          key: lbl, onClick: () => { setFrom(f); setTo(t); },
-          style: { fontSize: 11, fontWeight: 600, padding: "5px 9px", borderRadius: 6, border: `1px solid ${D.line}`, background: "transparent", color: D.dim, cursor: "pointer" },
-        }, lbl)),
-      ),
-      h("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" } },
-        h("button", { onClick: () => setOpen(false), style: { fontSize: 12, fontWeight: 700, padding: "7px 12px", borderRadius: 8, border: `1px solid ${D.line}`, background: "transparent", color: D.dim, cursor: "pointer" } }, "Cancelar"),
-        h("button", { onClick: apply, style: { fontSize: 12, fontWeight: 700, padding: "7px 14px", borderRadius: 8, border: "none", background: D.orange, color: "#fff", cursor: "pointer" } }, "Aplicar"),
-      ),
-    ),
-  );
+  const convPoints=data.map(function(d,i){return[PL+i*xStep,PT+ch-(d.conversations/maxConv)*ch]});
+  const cpmPoints=data.map(function(d,i){return[PL+i*xStep,PT+ch-((d.cost_per_msg||0)/maxCPM)*ch]});
+  const line=function(pts){return pts.map(function(p,i){return(i===0?"M":"L")+p[0]+","+p[1]}).join(" ")};
+
+  return h("div",{style:{marginTop:16,background:D.card,border:`1px solid ${D.line}`,borderRadius:14,padding:"14px 15px"}},
+    h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12}},
+      icon("BarChart3",15,D.orange),
+      h("span",{style:{fontSize:12.5,fontWeight:800,color:D.text,letterSpacing:.3}},"RENDIMIENTO MENSUAL"),
+      h("div",{style:{marginLeft:"auto",display:"flex",gap:14,fontSize:11}},
+        h("span",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{style:{width:12,height:3,background:D.orange,borderRadius:2,display:"inline-block"}}),h("span",{style:{color:D.dim}},"Conversaciones")),
+        h("span",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{style:{width:12,height:3,background:D.amber,borderRadius:2,display:"inline-block"}}),h("span",{style:{color:D.dim}},"Costo/msj")))),
+    h("svg",{viewBox:`0 0 ${W} ${H}`,style:{width:"100%",height:"auto"}},
+      // Grid lines
+      ...[0,.25,.5,.75,1].map(function(f){var y=PT+ch*(1-f);return h("line",{key:"g"+f,x1:PL,y1:y,x2:PL+cw,y2:y,stroke:D.lineSoft,strokeWidth:.5})}),
+      // Conversaciones line
+      h("path",{d:line(convPoints),fill:"none",stroke:D.orange,strokeWidth:2.5,strokeLinejoin:"round"}),
+      // CPM line
+      h("path",{d:line(cpmPoints),fill:"none",stroke:D.amber,strokeWidth:2,strokeDasharray:"6,3",strokeLinejoin:"round"}),
+      // Conv dots + labels
+      ...convPoints.map(function(p,i){return h("g",{key:"cd"+i},h("circle",{cx:p[0],cy:p[1],r:4,fill:D.orange}),h("text",{x:p[0],y:p[1]-10,fill:D.text,fontSize:10,fontWeight:700,textAnchor:"middle"},data[i].conversations))}),
+      // CPM dots + labels
+      ...cpmPoints.map(function(p,i){if(!data[i].cost_per_msg)return null;return h("g",{key:"cp"+i},h("circle",{cx:p[0],cy:p[1],r:3,fill:D.amber}),h("text",{x:p[0],y:p[1]+16,fill:D.amber,fontSize:9,fontWeight:600,textAnchor:"middle"},heroCost(data[i].cost_per_msg,cur)))}),
+      // X axis labels
+      ...data.map(function(d,i){return h("text",{key:"x"+i,x:PL+i*xStep,y:H-10,fill:D.dim,fontSize:11,fontWeight:600,textAnchor:"middle"},d.label)}),
+      // Y axis labels (conv)
+      ...[0,.5,1].map(function(f){return h("text",{key:"y"+f,x:PL-8,y:PT+ch*(1-f)+4,fill:D.dim,fontSize:9,textAnchor:"end"},Math.round(maxConv*f))})));
 }
 
-/* Detail */
-function Detail({ account, range, setRange }) {
-  const [state, setState] = useState("loading");
-  const [data, setData] = useState(null);
-  const [ts, setTs] = useState(null);
-  const [err, setErr] = useState(null);
-  const [an, setAn] = useState(null);
-  const [anState, setAnState] = useState("idle");
-  const [target, setTarget] = useState(localStorage.getItem(`tgt:${account.id}`) || "");
-  const [targetCPC, setTargetCPC] = useState(localStorage.getItem(`tgtcpc:${account.id}`) || "");
+/* ================================================================ */
+/* DETAIL                                                            */
+/* ================================================================ */
+function Detail({account,range,setRange}){
+  const[st,setSt]=useState("loading");
+  const[data,setData]=useState(null);
+  const[ts,setTs]=useState(null);
+  const[err,setErr]=useState(null);
+  const[an,setAn]=useState(null);
+  const[anSt,setAnSt]=useState("idle");
+  const[target,setTarget]=useState("");
+  const[targetCPC,setTargetCPC]=useState("");
+  const[editTarget,setEditTarget]=useState(null);
+  const reqId=useRef(0);
+  const cur=data&&data.currency||account.cur;
 
-  // Sincronizar con settings del servidor al abrir
-  useEffect(() => {
-    apiFetch("/api/settings").then(s => {
-      const a = s[account.id];
-      if (a) {
-        if (a.targetCPM && !target) { setTarget(String(a.targetCPM)); localStorage.setItem(`tgt:${account.id}`, String(a.targetCPM)); }
-        if (a.targetCPC && !targetCPC) { setTargetCPC(String(a.targetCPC)); localStorage.setItem(`tgtcpc:${account.id}`, String(a.targetCPC)); }
-      }
-    }).catch(()=>{});
-  }, [account.id]);
-  const [editTarget, setEditTarget] = useState(null); // "cpm" | "cpc" | null
-  const reqId = useRef(0);
+  // Cargar targets del servidor
+  useEffect(function(){
+    apiFetch("/api/settings").then(function(s){
+      var a=s[account.id];
+      if(a){if(a.targetCPM)setTarget(String(a.targetCPM));if(a.targetCPC)setTargetCPC(String(a.targetCPC))}
+    }).catch(function(){});
+  },[account.id]);
 
-  const cur = data?.currency || account.cur;
+  const phrase=range.key==="d7"?"los \u00faltimos 7 d\u00edas":range.key==="d30"?"los \u00faltimos 30 d\u00edas":"del "+range.from+" al "+range.to;
 
-  const run = useCallback(async (force = false) => {
-    const my = ++reqId.current;
-    setErr(null); setState("loading"); setAn(null); setAnState("idle");
-    try {
-      const params = new URLSearchParams({ range: range.key });
-      if (range.key === "custom") { params.set("from", range.from); params.set("to", range.to); }
-      if (force) params.set("_force", "1"); // el servidor ignora esto, pero evita que el browser cachee
-      const d = await apiFetch(`/api/account/${account.id}?${params}`);
-      if (my !== reqId.current) return;
-      setData(d); setTs(Date.now()); setState("done");
+  const run=useCallback(async function(force){
+    var my=++reqId.current;
+    setErr(null);setSt("loading");setAn(null);setAnSt("idle");
+    try{
+      var p=new URLSearchParams({range:range.key});
+      if(range.key==="custom"){p.set("from",range.from);p.set("to",range.to)}
+      var d=await apiFetch(`/api/account/${account.id}?${p}`);
+      if(my!==reqId.current)return;
+      setData(d);setTs(Date.now());setSt("done");
+      setAnSt("loading");
+      apiFetch(`/api/account/${account.id}/analysis`,{method:"POST",body:JSON.stringify({name:account.name,phrase,payload:d,budgetConfig:{currency:d.currency||account.cur,budget:localStorage.getItem("budget:"+account.id)||null,targetCPM:target||null,targetCPC:targetCPC||null}})}).then(function(a){if(my===reqId.current){setAn(a);setAnSt("done")}}).catch(function(){if(my===reqId.current)setAnSt("error")});
+    }catch(e){if(my===reqId.current){setErr(e.message);setSt("error")}}
+  },[account.id,account.name,range,phrase]);
 
-      // Análisis IA en paralelo
-      setAnState("loading");
-      const phrase = range.key === "d7" ? "los últimos 7 días" : range.key === "d30" ? "los últimos 30 días" : `del ${range.from} al ${range.to}`;
-      apiFetch(`/api/account/${account.id}/analysis`, {
-        method: "POST",
-        body: JSON.stringify({
-          name: account.name, phrase, payload: d,
-          budgetConfig: {
-            currency: d.currency || account.cur,
-            budget: localStorage.getItem(`budget:${account.id}`) || null,
-            targetCPM: localStorage.getItem(`tgt:${account.id}`) || null,
-            targetCPC: localStorage.getItem(`tgtcpc:${account.id}`) || null,
-          }
-        }),
-      }).then(a => {
-        if (my !== reqId.current) return;
-        setAn(a); setAnState("done");
-      }).catch(() => {
-        if (my === reqId.current) setAnState("error");
-      });
-    } catch (e) {
-      if (my === reqId.current) { setErr(e.message); setState("error"); }
+  useEffect(function(){run(false)},[run]);
+
+  var acc=data&&data.account||{};
+  var nowVal=toNum(acc.cost_per_msg);
+  var prev=data&&data.prev_cost_per_msg;
+  var delta=prev&&toNum(prev)>0?(nowVal-toNum(prev))/toNum(prev):null;
+  var tgt=target===""?null:+target;
+  var tgtCPC=targetCPC===""?null:+targetCPC;
+  var cpcVal=toNum(acc.clicks)>0?toNum(acc.spend)/toNum(acc.clicks):0;
+
+  var alerts=useMemo(function(){
+    if(st!=="done")return[];
+    var out=[];
+    if(delta!=null){
+      if(delta>.15)out.push({sev:delta>.4?"red":"amber",text:"El costo por mensaje subi\u00f3 "+Math.round(delta*100)+"% respecto al per\u00edodo anterior ("+heroCost(prev,cur)+" \u2192 "+heroCost(nowVal,cur)+")."});
+      else if(delta<-.1)out.push({sev:"green",text:"El costo por mensaje baj\u00f3 "+Math.abs(Math.round(delta*100))+"% respecto al per\u00edodo anterior."});
     }
-  }, [account.id, account.name, range]);
-
-  useEffect(() => { run(false); }, [run]);
-
-  const acc = data?.account || {};
-  const nowVal = toNum(acc.cost_per_msg);
-  const prev = data?.prev_cost_per_msg;
-  const delta = prev && toNum(prev) > 0 ? (nowVal - toNum(prev)) / toNum(prev) : null;
-  const tgt = target === "" ? null : +target;
-
-  const alerts = useMemo(() => {
-    if (state !== "done") return [];
-    const out = [];
-    if (delta != null) {
-      if (delta > 0.15) out.push({ sev: delta > 0.4 ? "red" : "amber", text: `El costo por mensaje subió ${Math.round(delta*100)}% respecto al período anterior (${heroCost(prev, cur)} → ${heroCost(nowVal, cur)}).` });
-      else if (delta < -0.1) out.push({ sev: "green", text: `El costo por mensaje bajó ${Math.abs(Math.round(delta*100))}% respecto al período anterior. Buen momento para escalar.` });
+    if(tgt!=null){
+      if(nowVal>tgt)out.push({sev:"red",text:"Costo por mensaje "+heroCost(nowVal,cur)+" por encima del objetivo de "+heroCost(tgt,cur)+"."});
+      else out.push({sev:"green",text:"Costo por mensaje dentro del objetivo ("+heroCost(nowVal,cur)+" \u2264 "+heroCost(tgt,cur)+")."});
     }
-    if (tgt != null) {
-      if (nowVal > tgt) out.push({ sev: "red", text: `Costo por mensaje ${heroCost(nowVal, cur)} por encima del objetivo de ${heroCost(tgt, cur)}.` });
-      else out.push({ sev: "green", text: `Costo por mensaje dentro del objetivo (${heroCost(nowVal, cur)} ≤ ${heroCost(tgt, cur)}).` });
+    if(tgtCPC!=null&&cpcVal>0){
+      if(cpcVal>tgtCPC)out.push({sev:"red",text:"Costo por clic "+heroCost(cpcVal,cur)+" por encima del objetivo de "+heroCost(tgtCPC,cur)+"."});
+      else out.push({sev:"green",text:"Costo por clic dentro del objetivo."});
     }
-    // Alerta CPC
-    const tgtCPC = targetCPC === "" ? null : +targetCPC;
-    const cpcVal = toNum(acc.clicks) > 0 ? toNum(acc.spend) / toNum(acc.clicks) : 0;
-    if (tgtCPC != null && cpcVal > 0) {
-      if (cpcVal > tgtCPC) out.push({ sev: "red", text: `Costo por clic ${heroCost(cpcVal, cur)} por encima del objetivo de ${heroCost(tgtCPC, cur)}.` });
-      else out.push({ sev: "green", text: `Costo por clic dentro del objetivo (${heroCost(cpcVal, cur)} ≤ ${heroCost(tgtCPC, cur)}).` });
-    }
-    if (!out.length) out.push({ sev: "green", text: "Sin alertas en esta ventana — costo por mensaje estable." });
+    if(!out.length)out.push({sev:"green",text:"Sin alertas \u2014 costo por mensaje estable."});
     return out;
-  }, [state, delta, prev, nowVal, tgt, cur]);
+  },[st,delta,prev,nowVal,tgt,tgtCPC,cpcVal,cur]);
 
-  const trendCPM = delta == null ? null : { dir: delta > 0.02 ? "up" : delta < -0.02 ? "down" : "flat", color: delta > 0.15 ? D.red : delta < -0.1 ? D.green : D.dim, text: `${delta > 0 ? "+" : ""}${Math.round(delta*100)}% vs. anterior` };
-  const sevColor = { red: [D.red, D.redSoft], amber: [D.amber, D.amberSoft], green: [D.green, D.greenSoft] };
+  var trendCPM=delta==null?null:{dir:delta>.02?"up":delta<-.02?"down":"flat",color:delta>.15?D.red:delta<-.1?D.green:D.dim,text:(delta>0?"+":"")+Math.round(delta*100)+"% vs. anterior"};
+  var sevColor={red:[D.red,D.redSoft],amber:[D.amber,D.amberSoft],green:[D.green,D.greenSoft]};
 
-  return h("div", null,
-    /* Barra de cuenta */
-    h("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 } },
-      h("div", { style: { minWidth: 0, flex: 1 } },
-        h("div", { style: { fontSize: 18, fontWeight: 800, color: D.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, account.name),
-        h("div", { style: { fontSize: 11.5, color: D.faint } }, `${account.biz} · #${account.id}`),
-      ),
-      h(RangeControl, { range, setRange }),
-      h("button", {
-        onClick: () => run(true), disabled: state === "loading",
-        style: { display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, borderRadius: 10, border: `1px solid ${D.line}`, background: D.card, color: D.text, cursor: "pointer", opacity: state === "loading" ? 0.6 : 1 },
-      }, state === "loading" ? h("span", { className: "spin" }, icon("Loader2", 14)) : icon("RefreshCw", 14), state === "loading" ? "Trayendo…" : "Actualizar"),
-    ),
+  const saveTarget=function(key,val){
+    apiFetch(`/api/settings/${account.id}`,{method:"POST",body:JSON.stringify({[key]:val?+val:null})}).catch(function(){});
+  };
 
-    /* Error */
-    state === "error" && h("div", { style: { background: D.redSoft, border: `1px solid ${D.red}44`, borderRadius: 12, padding: 14, color: D.text, fontSize: 13, display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 14 } },
-      icon("AlertTriangle", 16, D.red),
-      h("div", { style: { flex: 1 } }, err),
-      h("button", { onClick: () => run(true), style: { color: D.red, background: "none", border: "none", fontWeight: 700, cursor: "pointer" } }, "Reintentar"),
-    ),
+  return h("div",null,
+    /* Barra cuenta */
+    h("div",{style:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}},
+      h("div",{style:{minWidth:0,flex:1}},h("div",{style:{fontSize:18,fontWeight:800,color:D.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},account.name),h("div",{style:{fontSize:11.5,color:D.faint}},(account.biz||"")+" \u00b7 #"+account.id)),
+      h(RangeControl,{range,setRange}),
+      h("button",{onClick:function(){run(true)},disabled:st==="loading",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.text,cursor:"pointer",opacity:st==="loading"?.6:1}},st==="loading"?h("span",{className:"spin"},icon("Loader2",14)):icon("RefreshCw",14),st==="loading"?"Trayendo\u2026":"Actualizar")),
 
-    /* Loading */
-    state === "loading" && !data && h("div", { style: { textAlign: "center", color: D.dim, padding: "50px 0", fontSize: 13.5 } },
-      h("span", { className: "spin", style: { display: "block", marginBottom: 12 } }, icon("Loader2", 28, D.orange)),
-      "Consultando Meta Ads en vivo…",
-      h("br"), h("span", { style: { fontSize: 11, color: D.faint } }, "La primera consulta tarda 15-30 segundos. Las siguientes son instantáneas."),
-    ),
+    st==="error"&&h("div",{style:{background:D.redSoft,border:`1px solid ${D.red}44`,borderRadius:12,padding:14,color:D.text,fontSize:13,display:"flex",gap:10,alignItems:"flex-start",marginBottom:14}},icon("AlertTriangle",16,D.red),h("div",{style:{flex:1}},err),h("button",{onClick:function(){run(true)},style:{color:D.red,background:"none",border:"none",fontWeight:700,cursor:"pointer"}},"Reintentar")),
 
-    data && h("div", null,
+    st==="loading"&&!data&&h("div",{style:{textAlign:"center",color:D.dim,padding:"50px 0",fontSize:13.5}},h("span",{className:"spin",style:{display:"block",marginBottom:12}},icon("Loader2",28,D.orange)),"Consultando Meta Ads\u2026"),
+
+    data&&h("div",null,
       /* Hero stats */
-      h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 10 } },
-        h(Stat, { iconName: "DollarSign", label: "Gasto total", value: heroMoney(acc.spend, cur), tint: D.orange }),
-        h(Stat, { iconName: "MessageCircle", label: "Conversaciones", value: heroNum(acc.conversations) }),
-        h(Stat, { iconName: "Target", label: "Costo por mensaje", value: heroCost(acc.cost_per_msg, cur), trend: trendCPM }),
-        h(Stat, { iconName: "Users", label: "Alcance", value: heroNum(acc.reach) }),
-        h(Stat, { iconName: "Eye", label: "Impresiones", value: heroNum(acc.impressions) }),
-        h(Stat, { iconName: "MousePointerClick", label: "CTR", value: pct(acc.ctr), tint: toNum(acc.ctr) >= 1 ? D.green : D.text }),
-        toNum(acc.ig_profile_visits) > 0 && h(Stat, { iconName: "MapPin", label: "Visitas perfil IG", value: heroNum(acc.ig_profile_visits), tint: "#C13584" }),
-        toNum(acc.ig_follows) > 0 && h(Stat, { iconName: "UserPlus", label: "Nuevos seguidores IG", value: heroNum(acc.ig_follows), tint: "#C13584" }),
-      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(155px,1fr))",gap:10}},
+        h(Stat,{iconName:"DollarSign",label:"Gasto total",value:heroMoney(acc.spend,cur),tint:D.orange}),
+        h(Stat,{iconName:"MessageCircle",label:"Conversaciones",value:heroNum(acc.conversations)}),
+        h(Stat,{iconName:"Target",label:"Costo por mensaje",value:heroCost(acc.cost_per_msg,cur),trend:trendCPM}),
+        h(Stat,{iconName:"Users",label:"Alcance",value:heroNum(acc.reach)}),
+        h(Stat,{iconName:"Eye",label:"Impresiones",value:heroNum(acc.impressions)}),
+        h(Stat,{iconName:"MousePointerClick",label:"CTR",value:pct(acc.ctr),tint:toNum(acc.ctr)>=1?D.green:D.text}),
+        toNum(acc.ig_follows)>0&&h(Stat,{iconName:"UserPlus",label:"Nuevos seguidores IG",value:heroNum(acc.ig_follows),tint:"#C13584"}),
+        toNum(acc.ig_profile_visits)>0&&h(Stat,{iconName:"MapPin",label:"Visitas perfil IG",value:heroNum(acc.ig_profile_visits),tint:"#C13584"})),
 
       /* Campañas */
-      h("div", { style: { marginTop: 16 } },
-        h("div", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3, marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
-          icon("BarChart3", 15, D.orange), " CAMPAÑAS ",
-          h("span", { style: { color: D.faint, fontWeight: 600 } }, `(${(data.campaigns||[]).length})`),
-          h("span", { style: { color: D.faint, fontWeight: 500, fontSize: 11, marginLeft: "auto" } }, "Tocá una campaña para ver sus anuncios"),
-        ),
-        h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
-          ...(data.campaigns || []).map((c, i) => h(CampaignCard, { key: c.id || i, c, cur, range })),
-          (!data.campaigns || data.campaigns.length === 0) && h("div", { style: { fontSize: 12.5, color: D.faint, padding: "10px 0" } }, "No se encontraron campañas con datos en este período."),
-        ),
-      ),
+      h("div",{style:{marginTop:16}},
+        h("div",{style:{fontSize:12.5,fontWeight:800,color:D.text,letterSpacing:.3,marginBottom:10,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},icon("BarChart3",15,D.orange)," CAMPA\u00d1AS",h("span",{style:{color:D.faint,fontWeight:600}},"("+(data.campaigns||[]).length+")"),h("span",{style:{color:D.faint,fontWeight:500,fontSize:11,marginLeft:"auto"}},"Toc\u00e1 una campa\u00f1a para ver sus anuncios")),
+        h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+          ...(data.campaigns||[]).map(function(c,i){return h(CampaignCard,{key:c.id||i,c,cur,range})}),
+          (!data.campaigns||data.campaigns.length===0)&&h("div",{style:{fontSize:12.5,color:D.faint,padding:"10px 0"}},"Sin campa\u00f1as con datos."))),
 
-/* Alertas */
-      h("div", { style: { marginTop: 16, background: D.surface, border: `1px solid ${D.line}`, borderRadius: 14, padding: "14px 15px" } },
-        h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" } },
-          icon("AlertTriangle", 15, D.amber),
-          h("span", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 } }, "PANEL DE ALERTAS"),
-          h("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: D.dim } },
-            h("div", { style: { display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" } },
-              h("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
-                h("span", null, "Obj. msj:"),
-                editTarget === "cpm"
-                  ? h("input", { autoFocus: true, type: "number", value: target, placeholder: "0", onChange: e => { setTarget(e.target.value); localStorage.setItem(`tgt:${account.id}`, e.target.value); apiFetch(`/api/settings/${account.id}`, { method: 'POST', body: JSON.stringify({ targetCPM: +e.target.value || null }) }).catch(()=>{}); }, onBlur: () => setEditTarget(null), onKeyDown: e => e.key === "Enter" && setEditTarget(null), style: { width: 70, background: D.card, border: `1px solid ${D.orange}`, borderRadius: 7, color: D.text, fontSize: 12, padding: "4px 7px", outline: "none", fontFamily: "inherit" } })
-                  : h("button", { onClick: () => setEditTarget("cpm"), style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 7, color: target ? D.orange : D.faint, fontSize: 12, fontWeight: 700, padding: "4px 9px", cursor: "pointer" } }, target ? heroCost(+target, cur) : "definir"),
-              ),
-              h("div", { style: { display: "flex", alignItems: "center", gap: 5 } },
-                h("span", null, "Obj. clic:"),
-                editTarget === "cpc"
-                  ? h("input", { autoFocus: true, type: "number", value: targetCPC, placeholder: "0", onChange: e => { setTargetCPC(e.target.value); localStorage.setItem(`tgtcpc:${account.id}`, e.target.value); apiFetch(`/api/settings/${account.id}`, { method: 'POST', body: JSON.stringify({ targetCPC: +e.target.value || null }) }).catch(()=>{}); }, onBlur: () => setEditTarget(null), onKeyDown: e => e.key === "Enter" && setEditTarget(null), style: { width: 70, background: D.card, border: `1px solid ${D.orange}`, borderRadius: 7, color: D.text, fontSize: 12, padding: "4px 7px", outline: "none", fontFamily: "inherit" } })
-                  : h("button", { onClick: () => setEditTarget("cpc"), style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 7, color: targetCPC ? D.orange : D.faint, fontSize: 12, fontWeight: 700, padding: "4px 9px", cursor: "pointer" } }, targetCPC ? heroCost(+targetCPC, cur) : "definir"),
-              ),
-            ),
-          ),
-        ),
-        h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
-          ...alerts.map((al, i) => {
-            const [c, bg] = sevColor[al.sev];
-            return h("div", { key: i, style: { display: "flex", gap: 9, alignItems: "flex-start", background: bg, border: `1px solid ${c}33`, borderRadius: 10, padding: "10px 12px" } },
-              icon(al.sev === "green" ? "CheckCircle2" : "AlertTriangle", 15, c),
-              h("span", { style: { fontSize: 12.5, color: D.text, lineHeight: 1.5 } }, al.text),
-            );
-          }),
-        ),
-      ),
+      /* Alertas */
+      h("div",{style:{marginTop:16,background:D.surface,border:`1px solid ${D.line}`,borderRadius:14,padding:"14px 15px"}},
+        h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}},
+          icon("AlertTriangle",15,D.amber),h("span",{style:{fontSize:12.5,fontWeight:800,color:D.text,letterSpacing:.3}},"PANEL DE ALERTAS"),
+          h("div",{style:{marginLeft:"auto",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",fontSize:11.5,color:D.dim}},
+            h("div",{style:{display:"flex",alignItems:"center",gap:5}},h("span",null,"Obj. msj:"),
+              editTarget==="cpm"?h("input",{autoFocus:true,type:"number",value:target,placeholder:"0",onChange:function(e){setTarget(e.target.value);saveTarget("targetCPM",e.target.value)},onBlur:function(){setEditTarget(null)},onKeyDown:function(e){if(e.key==="Enter")setEditTarget(null)},style:{width:70,background:D.card,border:`1px solid ${D.orange}`,borderRadius:7,color:D.text,fontSize:12,padding:"4px 7px",outline:"none",fontFamily:"inherit"}}):h("button",{onClick:function(){setEditTarget("cpm")},style:{background:D.card,border:`1px solid ${D.line}`,borderRadius:7,color:target?D.orange:D.faint,fontSize:12,fontWeight:700,padding:"4px 9px",cursor:"pointer"}},target?heroCost(+target,cur):"definir")),
+            h("div",{style:{display:"flex",alignItems:"center",gap:5}},h("span",null,"Obj. clic:"),
+              editTarget==="cpc"?h("input",{autoFocus:true,type:"number",value:targetCPC,placeholder:"0",onChange:function(e){setTargetCPC(e.target.value);saveTarget("targetCPC",e.target.value)},onBlur:function(){setEditTarget(null)},onKeyDown:function(e){if(e.key==="Enter")setEditTarget(null)},style:{width:70,background:D.card,border:`1px solid ${D.orange}`,borderRadius:7,color:D.text,fontSize:12,padding:"4px 7px",outline:"none",fontFamily:"inherit"}}):h("button",{onClick:function(){setEditTarget("cpc")},style:{background:D.card,border:`1px solid ${D.line}`,borderRadius:7,color:targetCPC?D.orange:D.faint,fontSize:12,fontWeight:700,padding:"4px 9px",cursor:"pointer"}},targetCPC?heroCost(+targetCPC,cur):"definir")))),
+        h("div",{style:{display:"flex",flexDirection:"column",gap:8}},
+          ...alerts.map(function(al,i){var sc=sevColor[al.sev];return h("div",{key:i,style:{display:"flex",gap:9,alignItems:"flex-start",background:sc[1],border:`1px solid ${sc[0]}33`,borderRadius:10,padding:"10px 12px"}},icon(al.sev==="green"?"CheckCircle2":"AlertTriangle",15,sc[0]),h("span",{style:{fontSize:12.5,color:D.text,lineHeight:1.5}},al.text))}))),
 
-      /* Análisis IA */
-      h("div", { style: { marginTop: 16, background: D.card, border: `1px solid ${D.line}`, borderRadius: 14, padding: "14px 15px" } },
-        h("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
-          icon("Sparkles", 15, D.orange),
-          h("span", { style: { fontSize: 12.5, fontWeight: 800, color: D.text, letterSpacing: 0.3 } }, "RESUMEN IA"),
-          anState === "loading" && h("span", { className: "spin", style: { marginLeft: 4 } }, icon("Loader2", 13, D.faint)),
-        ),
-        anState === "loading" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "Analizando cuenta y campañas…"),
-        anState === "error" && h("div", { style: { fontSize: 12.5, color: D.faint } }, "No se pudo generar el análisis. ", h("button", { onClick: () => run(true), style: { color: D.orange, background: "none", border: "none", cursor: "pointer", fontWeight: 700 } }, "Reintentar")),
-        anState === "done" && an && h("div", null,
-          an.veredicto && h("div", { style: { fontSize: 13.5, color: D.text, fontWeight: 600, marginBottom: 12, lineHeight: 1.5 } }, an.veredicto),
-          h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 } },
-            h("div", { style: { background: D.greenSoft, borderRadius: 10, padding: "11px 13px" } },
-              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.green, marginBottom: 7, letterSpacing: 0.3 } }, "LO BUENO"),
-              ...(an.bueno || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.green } }, "+"), t)),
-            ),
-            h("div", { style: { background: D.redSoft, borderRadius: 10, padding: "11px 13px" } },
-              h("div", { style: { fontSize: 11, fontWeight: 800, color: D.red, marginBottom: 7, letterSpacing: 0.3 } }, "A MEJORAR"),
-              ...(an.malo || []).map((t, i) => h("div", { key: i, style: { fontSize: 12.5, color: D.text, lineHeight: 1.5, marginBottom: 6, display: "flex", gap: 7 } }, h("span", { style: { color: D.red } }, "–"), t)),
-            ),
-          ),
-        ),
-      ),
+      /* Resumen IA */
+      h("div",{style:{marginTop:16,background:D.card,border:`1px solid ${D.line}`,borderRadius:14,padding:"14px 15px"}},
+        h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12}},icon("Sparkles",15,D.orange),h("span",{style:{fontSize:12.5,fontWeight:800,color:D.text,letterSpacing:.3}},"RESUMEN IA"),anSt==="loading"&&h("span",{className:"spin",style:{marginLeft:4}},icon("Loader2",13,D.faint))),
+        anSt==="loading"&&h("div",{style:{fontSize:12.5,color:D.faint}},"Analizando\u2026"),
+        anSt==="error"&&h("div",{style:{fontSize:12.5,color:D.faint}},"No se pudo generar el an\u00e1lisis."),
+        anSt==="done"&&an&&h("div",null,
+          an.veredicto&&h("div",{style:{fontSize:13.5,color:D.text,fontWeight:600,marginBottom:12,lineHeight:1.5}},an.veredicto),
+          h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}},
+            h("div",{style:{background:D.greenSoft,borderRadius:10,padding:"11px 13px"}},h("div",{style:{fontSize:11,fontWeight:800,color:D.green,marginBottom:7,letterSpacing:.3}},"LO BUENO"),...(an.bueno||[]).map(function(t,i){return h("div",{key:i,style:{fontSize:12.5,color:D.text,lineHeight:1.5,marginBottom:6,display:"flex",gap:7}},h("span",{style:{color:D.green}},"+"),t)})),
+            h("div",{style:{background:D.redSoft,borderRadius:10,padding:"11px 13px"}},h("div",{style:{fontSize:11,fontWeight:800,color:D.red,marginBottom:7,letterSpacing:.3}},"A MEJORAR"),...(an.malo||[]).map(function(t,i){return h("div",{key:i,style:{fontSize:12.5,color:D.text,lineHeight:1.5,marginBottom:6,display:"flex",gap:7}},h("span",{style:{color:D.red}},"\u2013"),t)}))))),
 
-      ts && h("div", { style: { fontSize: 11, color: D.faint, textAlign: "center", marginTop: 16, lineHeight: 1.6 } },
-        `Datos ${data.fromCache ? "📦 desde caché del servidor" : "🔴 en vivo"} · actualizado ${ago(ts)} · próxima actualización automática en ${Math.round(CACHE_TTL/60)} min`,
-      ),
-    ),
-  );
+      /* Gráfico mensual */
+      h(MonthlyChart,{accountId:account.id,cur}),
+
+      ts&&h("div",{style:{fontSize:11,color:D.faint,textAlign:"center",marginTop:16,lineHeight:1.6}},"Datos "+(data.fromCache?"\ud83d\udce6 cach\u00e9":"\ud83d\udd34 en vivo")+" \u00b7 actualizado "+ago(ts))));
 }
 
-/* App principal */
-function App() {
-  const [authed, setAuthed] = useState(!!(CONFIG.serverUrl && CONFIG.secret));
-  const [view, setView] = useState({ name: "home" });
-  const [range, setRange] = useState({ key: "d7" });
-  const [appAccounts, setAppAccounts] = useState([]);
+/* ================================================================ */
+/* HOME — pantalla principal unificada                               */
+/* ================================================================ */
+function Home({onOpen}){
+  const[q,setQ]=useState("");
+  const[accounts,setAccounts]=useState([]);
+  const[metrics,setMetrics]=useState({});
+  const[settings,setSettings]=useState({});
+  const[loading,setLoading]=useState(false);
+  const[extraCols,setExtraCols]=useState(false);
+  const[editBudget,setEditBudget]=useState(null);
+  const[budgetInput,setBudgetInput]=useState("");
+  const[pinned,setPinned]=useState(function(){try{return JSON.parse(localStorage.getItem("cc_pinned")||"[]")}catch(e){return[]}});
 
-  useEffect(() => {
-    apiFetch("/api/accounts").then(accs => { if (accs && accs.length) setAppAccounts(accs); }).catch(() => {});
-  }, []);
+  useEffect(function(){
+    apiFetch("/api/accounts").then(function(a){if(a&&a.length)setAccounts(a)}).catch(function(){});
+    apiFetch("/api/settings").then(function(s){setSettings(s||{})}).catch(function(){});
+  },[]);
 
-  const account = view.name === "detail" ? appAccounts.find(a => a.id === view.id) : null;
+  const updateSetting=async function(id,key,val){
+    var c=settings[id]||{};var u=Object.assign({},c);u[key]=val;
+    setSettings(function(prev){var n=Object.assign({},prev);n[id]=u;return n});
+    apiFetch("/api/settings/"+id,{method:"POST",body:JSON.stringify(u)}).catch(function(){});
+  };
+  const getSetting=function(id,key){return(settings[id]||{})[key]||null};
+  const saveBudget=function(id,val){updateSetting(id,"budget",val===""?null:+val)};
+  const togglePin=function(id){
+    var nx=pinned.includes(id)?pinned.filter(function(x){return x!==id}):[].concat(pinned,[id]);
+    setPinned(nx);localStorage.setItem("cc_pinned",JSON.stringify(nx));
+  };
 
-  if (!authed) return h(Login, { onLogin: () => setAuthed(true) });
+  const loadAll=async function(){
+    if(!accounts.length)return;
+    setLoading(true);
+    try{var d=await apiFetch("/api/overview",{method:"POST",body:JSON.stringify({accounts:accounts.map(function(a){return a.id}),range:"d7"})});setMetrics(d)}catch(e){console.error(e)}
+    setLoading(false);
+  };
+  useEffect(function(){if(accounts.length>0)loadAll()},[accounts.length]);
 
-  return h("div", { style: { fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif", background: D.bg, color: D.text, borderRadius: 16, minHeight: "100vh", padding: 20 } },
-    /* Header */
-    h("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 18 } },
-      view.name === "detail"
-        ? h("button", { onClick: () => setView({ name: "home" }), style: { display: "inline-flex", alignItems: "center", gap: 8, padding: "0 14px 0 10px", height: 40, borderRadius: 20, background: D.card, border: `1px solid ${D.orange}`, color: D.orange, cursor: "pointer", flexShrink: 0, fontWeight: 700, fontSize: 13 } }, icon("ArrowLeft", 16, D.orange), "Volver")
-        : h("img", { src: "/logo.png", style: { width: 40, height: 40, borderRadius: 11, objectFit: "cover", flexShrink: 0 } }),
-      h("div", { style: { flex: 1, minWidth: 0 } },
-        h("div", { style: { fontSize: 17, fontWeight: 800, lineHeight: 1.1 } }, "Meta Ads · Command Center"),
-        h("div", { style: { fontSize: 12, color: D.faint } }, "Concepto Agencia"),
-      ),
-      h("div", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: D.green, background: D.greenSoft, padding: "5px 10px", borderRadius: 20, flexShrink: 0 } },
-        icon("Wifi", 13, D.green), " En vivo",
-      ),
-      h("button", {
-        onClick: () => { localStorage.removeItem("cc_secret"); CONFIG.secret = ""; setAuthed(false); },
-        title: "Cerrar sesión",
-        style: { background: "none", border: "none", cursor: "pointer", color: D.faint, padding: "4px 8px" },
-      }, icon("LogOut", 15, D.faint)),
-    ),
+  const getTargetCPM=function(id){return getSetting(id,"targetCPM")};
+  const getTargetCPC=function(id){return getSetting(id,"targetCPC")};
+  const cpmColor=function(id,val){var t=getTargetCPM(id);if(t&&val>t)return D.red;return D.text};
+  const cpcColor=function(id,val){var t=getTargetCPC(id);if(t&&val>t)return D.red;return D.text};
+  const calcCPC=function(acc){return toNum(acc.clicks)>0?toNum(acc.spend)/toNum(acc.clicks):0};
 
-    /* Tabs nav — solo visible cuando no estás en detalle */
-    view.name === "home"
-      ? h(Home, { onOpen: id => setView({ name: "detail", id }) })
-      : account
-        ? h(Detail, { account, range, setRange })
-        : h("div", { style: { color: D.faint, textAlign: "center", padding: 40 } }, "Cuenta no disponible."),
-  );
+  const filtered=useMemo(function(){
+    var s=q.trim().toLowerCase();
+    var rows=s?accounts.filter(function(a){return a.name.toLowerCase().includes(s)||a.id.includes(s)}):accounts;
+    return[].concat(rows).sort(function(a,b){
+      var pa=pinned.includes(a.id)?0:1,pb=pinned.includes(b.id)?0:1;
+      if(pa!==pb)return pa-pb;
+      var sa=parseFloat((metrics[a.id]||{}).account&&metrics[a.id].account.spend||0);
+      var sb=parseFloat((metrics[b.id]||{}).account&&metrics[b.id].account.spend||0);
+      return sb-sa;
+    });
+  },[q,accounts,metrics,pinned]);
+
+  const statusInfo=function(m){
+    if(!m||m.error)return{color:D.faint,bg:D.lineSoft,label:"..."};
+    if(toNum(m.account&&m.account.spend)>0)return{color:D.green,bg:D.greenSoft,label:"Activa"};
+    return{color:D.amber,bg:D.amberSoft,label:"Inactiva"};
+  };
+
+  const pctBudget=function(spend,budget){if(!budget||!spend)return null;return Math.round(toNum(spend)/budget*100)};
+  const pctColor=function(p){if(p==null)return D.faint;if(p>100)return D.red;if(p>80)return D.amber;return D.green};
+
+  const TH={padding:"5px 6px",fontSize:9,fontWeight:700,color:D.faint,textTransform:"uppercase",letterSpacing:.3,borderBottom:`1px solid ${D.line}`,whiteSpace:"nowrap",background:D.surface,textAlign:"right"};
+  const THL=Object.assign({},TH,{textAlign:"left"});
+  const TD={padding:"6px 6px",fontSize:11.5,color:D.text,borderBottom:`1px solid ${D.lineSoft}`,whiteSpace:"nowrap",textAlign:"right"};
+  const TDL=Object.assign({},TD,{textAlign:"left"});
+
+  return h("div",null,
+    h("div",{style:{display:"flex",alignItems:"center",gap:8,background:D.card,border:`1px solid ${D.line}`,borderRadius:12,padding:"0 12px",marginBottom:14}},
+      icon("Search",16,D.faint),
+      h("input",{value:q,onChange:function(e){setQ(e.target.value)},placeholder:"Buscar cliente por nombre\u2026",style:{border:"none",outline:"none",background:"transparent",color:D.text,fontSize:14,padding:"12px 0",width:"100%",fontFamily:"inherit"}}),
+      q&&h("button",{onClick:function(){setQ("")},style:{background:"none",border:"none",color:D.faint,cursor:"pointer"}},icon("X",14,D.faint))),
+    h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}},
+      h("div",{style:{fontSize:11,color:D.faint}},filtered.length+" cuentas \u00b7 \u00faltimos 7 d\u00edas"),
+      h("div",{style:{marginLeft:"auto",display:"flex",gap:6}},
+        h("button",{onClick:function(){setExtraCols(!extraCols)},style:{fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,border:`1px solid ${D.line}`,background:extraCols?D.orangeSoft:D.card,color:extraCols?D.orange:D.dim,cursor:"pointer"}},extraCols?"\u2212 Menos":"+ Instagram"),
+        h("button",{onClick:loadAll,disabled:loading,style:{fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,border:`1px solid ${D.line}`,background:D.card,color:D.text,cursor:"pointer",display:"flex",alignItems:"center",gap:5,opacity:loading?.6:1}},loading?h("span",{className:"spin"},icon("Loader2",12,D.faint)):icon("RefreshCw",12),loading?"Actualizando\u2026":"Actualizar"))),
+    h("div",{style:{borderRadius:12,border:`1px solid ${D.line}`,overflow:"hidden"}},
+      h("table",{style:{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}},
+        h("colgroup",null,
+          h("col",{style:{width:"28px"}}),h("col",{style:{width:"15%"}}),h("col",{style:{width:"7%"}}),
+          h("col",{style:{width:"8%"}}),h("col",{style:{width:"8%"}}),h("col",{style:{width:"5%"}}),
+          h("col",{style:{width:"7%"}}),h("col",{style:{width:"8%"}}),h("col",{style:{width:"8%"}}),
+          h("col",{style:{width:"6%"}}),h("col",{style:{width:"7%"}}),h("col",{style:{width:"7%"}}),
+          h("col",{style:{width:"42px"}}),
+          extraCols&&h("col",{style:{width:"6%"}}),extraCols&&h("col",{style:{width:"6%"}})),
+        h("thead",null,h("tr",null,
+          h("th",{style:Object.assign({},THL,{padding:"5px 4px"})},""),
+          h("th",{style:THL},"Cliente"),h("th",{style:Object.assign({},TH,{textAlign:"center"})},"Estado"),
+          h("th",{style:TH},"Gasto"),h("th",{style:TH},"Presup."),h("th",{style:TH},"%"),
+          h("th",{style:TH},"Conv."),h("th",{style:TH},"C/msj"),h("th",{style:TH},"C/clic"),
+          h("th",{style:TH},"CTR"),h("th",{style:TH},"Alcance"),h("th",{style:TH},"Impr."),
+          h("th",{style:Object.assign({},TH,{textAlign:"center"})},"Tarea"),
+          extraCols&&h("th",{style:TH},"Seg.IG"),extraCols&&h("th",{style:TH},"Vis.IG"))),
+        h("tbody",null,
+          ...filtered.map(function(a,idx){
+            var m=metrics[a.id];var acc=m&&m.account||{};var st=statusInfo(m);
+            var budget=getSetting(a.id,"budget");
+            var pctExec=pctBudget(acc.spend,budget);
+            var isPinned=pinned.includes(a.id);
+            var isEven=idx%2===0;var rowBg=isEven?D.surface:D.card;
+            var tw=getSetting(a.id,"taskWeek");
+            var taskSt=tw===currentWeek?(getSetting(a.id,"taskStatus")||"none"):"none";
+            var nextTask={none:"pending",pending:"done",done:"none"};
+
+            return h("tr",{key:a.id,style:{background:rowBg}},
+              h("td",{style:Object.assign({},TDL,{padding:"6px 4px",cursor:"pointer"}),onClick:function(e){e.stopPropagation();togglePin(a.id)}},h("span",{style:{color:isPinned?D.orange:D.lineSoft,fontSize:13}},"\u2605")),
+              h("td",{style:Object.assign({},TDL,{fontWeight:700,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis"}),onClick:function(){onOpen(a.id)}},a.name),
+              h("td",{style:Object.assign({},TD,{textAlign:"center"}),onClick:function(){onOpen(a.id)}},m?h("span",{style:{fontSize:9.5,fontWeight:700,color:st.color,background:st.bg,padding:"2px 6px",borderRadius:8}},st.label):h("span",{className:"spin"},icon("Loader2",10,D.faint))),
+              h("td",{style:Object.assign({},TD,{color:D.orange,fontWeight:700}),onClick:function(){onOpen(a.id)}},m?heroMoney(acc.spend,a.cur):"\u2014"),
+              h("td",{style:TD,onClick:function(e){e.stopPropagation()}},
+                editBudget===a.id?h("input",{autoFocus:true,type:"number",value:budgetInput,placeholder:"0",onChange:function(e){setBudgetInput(e.target.value)},onBlur:function(){saveBudget(a.id,budgetInput);setEditBudget(null)},onKeyDown:function(e){if(e.key==="Enter"){saveBudget(a.id,budgetInput);setEditBudget(null)}},style:{width:"100%",background:D.bg,border:`1px solid ${D.orange}`,borderRadius:5,color:D.text,fontSize:11,padding:"2px 4px",outline:"none",textAlign:"right"}}):h("button",{onClick:function(){setEditBudget(a.id);setBudgetInput(budget||"")},style:{background:"none",border:`1px dashed ${D.line}`,borderRadius:5,color:budget?D.dim:D.lineSoft,fontSize:10.5,fontWeight:600,padding:"1px 5px",cursor:"pointer",width:"100%",textAlign:"right"}},budget?heroMoney(budget,a.cur):"+")),
+              h("td",{style:Object.assign({},TD,{fontWeight:700,color:pctColor(pctExec)}),onClick:function(){onOpen(a.id)}},pctExec!=null?pctExec+"%":"\u2014"),
+              h("td",{style:TD,onClick:function(){onOpen(a.id)}},m?heroNum(acc.conversations):"\u2014"),
+              h("td",{style:Object.assign({},TD,{color:m?cpmColor(a.id,toNum(acc.cost_per_msg)):D.text,fontWeight:m&&cpmColor(a.id,toNum(acc.cost_per_msg))===D.red?700:400}),onClick:function(){onOpen(a.id)}},m?heroCost(acc.cost_per_msg,a.cur):"\u2014"),
+              h("td",{style:Object.assign({},TD,{color:m?cpcColor(a.id,calcCPC(acc)):D.text,fontWeight:m&&cpcColor(a.id,calcCPC(acc))===D.red?700:400}),onClick:function(){onOpen(a.id)}},m&&calcCPC(acc)>0?heroCost(calcCPC(acc),a.cur):"\u2014"),
+              h("td",{style:Object.assign({},TD,{color:toNum(acc.ctr)>=1?D.green:D.text,fontWeight:toNum(acc.ctr)>=1?700:400}),onClick:function(){onOpen(a.id)}},m?pct(acc.ctr):"\u2014"),
+              h("td",{style:TD,onClick:function(){onOpen(a.id)}},m?heroNum(acc.reach):"\u2014"),
+              h("td",{style:TD,onClick:function(){onOpen(a.id)}},m?heroNum(acc.impressions):"\u2014"),
+              h("td",{style:Object.assign({},TD,{textAlign:"center",cursor:"pointer",userSelect:"none",fontSize:14}),onClick:function(e){e.stopPropagation();e.preventDefault();updateSetting(a.id,"taskStatus",nextTask[taskSt]||"pending");updateSetting(a.id,"taskWeek",currentWeek)}},taskSt==="done"?"\u2705":taskSt==="pending"?"\ud83d\udfe1":"\u25cb"),
+              extraCols&&h("td",{style:Object.assign({},TD,{color:"#C13584"}),onClick:function(){onOpen(a.id)}},m&&toNum(acc.ig_follows)>0?heroNum(acc.ig_follows):"\u2014"),
+              extraCols&&h("td",{style:Object.assign({},TD,{color:"#C13584"}),onClick:function(){onOpen(a.id)}},m&&toNum(acc.ig_profile_visits)>0?heroNum(acc.ig_profile_visits):"\u2014"));
+          })))),
+    h("div",{style:{fontSize:10.5,color:D.faint,marginTop:8,textAlign:"center"}},"Clic en fila = detalle \u00b7 \u2605 = fijar arriba \u00b7 Presupuesto mensual, % = gasto semanal / presupuesto mensual"));
 }
 
-const CACHE_TTL = 900;
-ReactDOM.createRoot(document.getElementById("root")).render(h(App, null));
+/* ================================================================ */
+/* APP                                                               */
+/* ================================================================ */
+function App(){
+  const[authed,setAuthed]=useState(!!(CONFIG.serverUrl&&CONFIG.secret));
+  const[view,setView]=useState({name:"home"});
+  const[range,setRange]=useState({key:"d7"});
+  const[appAccounts,setAppAccounts]=useState([]);
+  useEffect(function(){if(authed)apiFetch("/api/accounts").then(function(a){if(a&&a.length)setAppAccounts(a)}).catch(function(){})},[authed]);
+  var account=view.name==="detail"?appAccounts.find(function(a){return a.id===view.id}):null;
+  if(!authed)return h(Login,{onLogin:function(){setAuthed(true)}});
+  return h("div",{style:{fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif",background:D.bg,color:D.text,borderRadius:16,minHeight:"100vh",padding:20}},
+    h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:18}},
+      view.name==="detail"?h("button",{onClick:function(){setView({name:"home"})},title:"Volver",style:{display:"inline-flex",alignItems:"center",gap:8,padding:"0 14px 0 10px",height:40,borderRadius:20,background:D.card,border:`1px solid ${D.orange}`,color:D.orange,cursor:"pointer",flexShrink:0,fontWeight:700,fontSize:13}},icon("ArrowLeft",16,D.orange),"Volver"):h("img",{src:"/logo.png",style:{width:40,height:40,borderRadius:11,objectFit:"cover",flexShrink:0}}),
+      h("div",{style:{flex:1,minWidth:0}},h("div",{style:{fontSize:17,fontWeight:800,lineHeight:1.1}},"Meta Ads \u00b7 Command Center"),h("div",{style:{fontSize:12,color:D.faint}},"Concepto Agencia")),
+      h("div",{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,fontWeight:700,color:D.green,background:D.greenSoft,padding:"5px 10px",borderRadius:20,flexShrink:0}},icon("Wifi",13,D.green)," En vivo"),
+      h("button",{onClick:function(){localStorage.removeItem("cc_secret");CONFIG.secret="";setAuthed(false)},title:"Cerrar sesi\u00f3n",style:{background:"none",border:"none",cursor:"pointer",color:D.faint,padding:"4px 8px"}},icon("LogOut",15,D.faint))),
+    view.name==="home"?h(Home,{onOpen:function(id){setView({name:"detail",id})}}):account?h(Detail,{account,range,setRange}):h("div",{style:{color:D.faint,textAlign:"center",padding:40}},"Cuenta no disponible."));
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(App,null));
 </script>
 </body>
 </html>

@@ -535,6 +535,65 @@ app.get("/api/account/:id/status", auth, async (req, res) => {
   } catch(e) { res.status(503).json({ error: e.message }); }
 });
 
+// Datos mensuales para gráfico (últimos 7 meses)
+app.get("/api/account/:id/monthly", auth, async (req, res) => {
+  const { id } = req.params;
+  const ck = `monthly:${id}`;
+  const cached = await cache.get(ck);
+  if (cached) return res.json(cached);
+
+  try {
+    // Calcular últimos 7 meses
+    const now = new Date();
+    const months = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const since = d.toISOString().slice(0, 10);
+      const until = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
+      months.push({
+        label: d.toLocaleDateString("es-AR", { month: "short" }).replace(".", ""),
+        year: d.getFullYear(),
+        since,
+        until,
+      });
+    }
+
+    // Traer insights para cada mes en paralelo
+    const results = await Promise.all(
+      months.map(async (m) => {
+        try {
+          const data = await fbGet(`act_${id}/insights`, {
+            fields: "spend,actions,cost_per_action_type,impressions,reach",
+            time_range: JSON.stringify({ since: m.since, until: m.until }),
+            level: "account",
+          });
+          const ins = data.data?.[0] || {};
+          const spend = parseFloat(ins.spend || 0);
+          const conv = extractConv(ins.actions);
+          const cpm = extractCPM(ins.cost_per_action_type, conv, spend);
+          return {
+            label: m.label,
+            year: m.year,
+            spend,
+            conversations: conv,
+            cost_per_msg: cpm,
+            reach: parseInt(ins.reach || 0),
+            impressions: parseInt(ins.impressions || 0),
+          };
+        } catch {
+          return { label: m.label, year: m.year, spend: 0, conversations: 0, cost_per_msg: null, reach: 0, impressions: 0 };
+        }
+      })
+    );
+
+    await cache.set(ck, results, 3600); // 1 hora
+    res.json(results);
+  } catch (e) {
+    console.error("❌ monthly:", e.message);
+    res.status(503).json({ error: e.message });
+  }
+});
+
 // Lista dinámica de cuentas desde Meta (cache 1 hora)
 app.get("/api/accounts", auth, async (req, res) => {
   const ck = "global:accounts";

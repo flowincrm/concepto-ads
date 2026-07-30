@@ -419,7 +419,14 @@ app.get("/api/account/:id", auth, async (req, res) => {
 
 app.post("/api/account/:id/analysis", auth, async (req, res) => {
   const { id } = req.params;
-  const { name, phrase, payload, budgetConfig } = req.body;
+  const { name, phrase, payload, budgetConfig: clientConfig } = req.body;
+  // Enriquecer con settings del servidor si no vienen del cliente
+  let budgetConfig = clientConfig;
+  if (!budgetConfig || !budgetConfig.budget) {
+    const settings = await cache.get("global:settings") || {};
+    const s = settings[id];
+    if (s) budgetConfig = { currency: s.currency || "ARS", budget: s.budget, targetCPM: s.targetCPM, targetCPC: s.targetCPC };
+  }
   const ck = `an:${id}:${phrase}`;
   const cached = await cache.get(ck);
   if (cached) return res.json({ ...cached, fromCache: true });
@@ -484,17 +491,32 @@ app.post("/api/overview", auth, async (req, res) => {
   res.json(results);
 });
 
-// Guardar presupuestos/objetivos de cuentas (persiste en memoria/Redis)
-app.post("/api/budgets", auth, async (req, res) => {
-  const { budgets } = req.body; // { accountId: { budget, targetCPM, targetCPC, currency } }
-  if (!budgets) return res.status(400).json({ error: "Se requiere objeto budgets" });
-  await cache.set("global:budgets", budgets, 86400 * 30); // 30 días
-  res.json({ ok: true });
+// Settings compartidos: presupuestos, objetivos y tareas (persiste en Redis 90 días)
+app.get("/api/settings", auth, async (req, res) => {
+  const settings = await cache.get("global:settings") || {};
+  res.json(settings);
 });
 
-app.get("/api/budgets", auth, async (req, res) => {
-  const budgets = await cache.get("global:budgets") || {};
-  res.json(budgets);
+// Actualizar settings de una cuenta específica
+app.post("/api/settings/:id", auth, async (req, res) => {
+  const { id } = req.params;
+  const updates = req.body; // { budget, targetCPM, targetCPC, taskDone, taskWeek }
+  const settings = await cache.get("global:settings") || {};
+  settings[id] = { ...(settings[id] || {}), ...updates };
+  await cache.set("global:settings", settings, 86400 * 90); // 90 días
+  res.json({ ok: true, data: settings[id] });
+});
+
+// Actualizar settings en batch (múltiples cuentas)
+app.post("/api/settings", auth, async (req, res) => {
+  const { settings: incoming } = req.body;
+  if (!incoming) return res.status(400).json({ error: "Se requiere objeto settings" });
+  const current = await cache.get("global:settings") || {};
+  for (const [id, vals] of Object.entries(incoming)) {
+    current[id] = { ...(current[id] || {}), ...vals };
+  }
+  await cache.set("global:settings", current, 86400 * 90);
+  res.json({ ok: true });
 });
 
 // Estado real de una cuenta (account_status de Meta)

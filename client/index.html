@@ -9,8 +9,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.383.0/umd/lucide.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:#0E0C07;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#F6F1E7;min-height:100vh}
-#root{max-width:1200px;margin:0 auto;padding:20px 16px 60px}
+body{background:#0E0C07;overflow-x:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#F6F1E7;min-height:100vh}
+#root{max-width:100%;margin:0 auto;padding:16px 12px 60px}
 .spin{animation:sp .9s linear infinite;display:inline-block}
 @keyframes sp{to{transform:rotate(360deg)}}
 input::placeholder{color:#7C7360}
@@ -508,15 +508,9 @@ function Home({onOpen}){
       h("div",{style:{marginLeft:"auto",display:"flex",gap:6}},
         h("button",{onClick:function(){setExtraCols(!extraCols)},style:{fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,border:`1px solid ${D.line}`,background:extraCols?D.orangeSoft:D.card,color:extraCols?D.orange:D.dim,cursor:"pointer"}},extraCols?"\u2212 Menos":"+ Instagram"),
         h("button",{onClick:loadAll,disabled:loading,style:{fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:8,border:`1px solid ${D.line}`,background:D.card,color:D.text,cursor:"pointer",display:"flex",alignItems:"center",gap:5,opacity:loading?.6:1}},loading?h("span",{className:"spin"},icon("Loader2",12,D.faint)):icon("RefreshCw",12),loading?"Actualizando\u2026":"Actualizar"))),
-    h("div",{style:{borderRadius:12,border:`1px solid ${D.line}`,overflow:"hidden"}},
-      h("table",{style:{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}},
-        h("colgroup",null,
-          h("col",{style:{width:"28px"}}),h("col",{style:{width:"15%"}}),h("col",{style:{width:"7%"}}),
-          h("col",{style:{width:"8%"}}),h("col",{style:{width:"8%"}}),h("col",{style:{width:"5%"}}),
-          h("col",{style:{width:"7%"}}),h("col",{style:{width:"8%"}}),h("col",{style:{width:"8%"}}),
-          h("col",{style:{width:"6%"}}),h("col",{style:{width:"7%"}}),h("col",{style:{width:"7%"}}),
-          h("col",{style:{width:"42px"}}),
-          extraCols&&h("col",{style:{width:"6%"}}),extraCols&&h("col",{style:{width:"6%"}})),
+    h("div",{style:{borderRadius:12,border:`1px solid ${D.line}`,overflow:"hidden",maxWidth:"100%"}},
+      h("table",{style:{width:"100%",borderCollapse:"collapse",tableLayout:"auto",maxWidth:"100%"}},
+        
         h("thead",null,h("tr",null,
           h("th",{style:Object.assign({},THL,{padding:"5px 4px"})},""),
           h("th",{style:THL},"Cliente"),h("th",{style:Object.assign({},TH,{textAlign:"center"})},"Estado"),

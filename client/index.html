@@ -412,10 +412,10 @@ function AudienceSection({ campaignId, range }) {
       extra && h("div", { style: { fontSize: 10, color: D.faint, marginTop: 2 } }, extra),
     );
 
-  const Section = ({ title, children }) =>
+  const Section = ({ title }, ...children) =>
     h("div", { style: { background: D.card, border: `1px solid ${D.line}`, borderRadius: 12, padding: "12px 14px" } },
       h("div", { style: { fontSize: 10, fontWeight: 800, color: D.faint, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 10 } }, title),
-      children,
+      ...children,
     );
 
   const hasData = arr => arr && arr.length > 0;
@@ -432,9 +432,9 @@ function AudienceSection({ campaignId, range }) {
     h("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 } },
 
       /* Género */
-      hasData(data.gender) && h(Section, { title: "Género" },
+      hasData(data.gender) && Section( { title: "Género" },
         h("div", { style: { display: "flex", alignItems: "center", gap: 14 } },
-          h(DonutChart, { items: data.gender }),
+          DonutChart({ items: data.gender }),
           h("div", { style: { flex: 1 } },
             ...data.gender.map(g =>
               h("div", { key: g.label, style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 8 } },
@@ -450,18 +450,18 @@ function AudienceSection({ campaignId, range }) {
       ),
 
       /* Edad */
-      hasData(data.age) && h(Section, { title: "Edad" },
-        ...data.age.map(a => h(Bar, { key: a.label, label: a.label, pct: a.pct, color: D.orange })),
+      hasData(data.age) && Section( { title: "Edad" },
+        ...data.age.map(a => Bar({ key: a.label, label: a.label, pct: a.pct, color: D.orange })),
       ),
 
       /* Plataforma */
-      hasData(data.platform) && h(Section, { title: "Plataforma" },
-        ...data.platform.map(p => h(Bar, { key: p.label, label: p.label, pct: p.pct, color: platformColor(p.label) })),
+      hasData(data.platform) && Section( { title: "Plataforma" },
+        ...data.platform.map(p => Bar({ key: p.label, label: p.label, pct: p.pct, color: platformColor(p.label) })),
       ),
 
       /* Regiones */
-      hasData(data.region) && h(Section, { title: "Ciudades / Provincias" },
-        ...data.region.map(r => h(Bar, { key: r.label, label: r.label, pct: r.pct, color: TEAL })),
+      hasData(data.region) && Section( { title: "Ciudades / Provincias" },
+        ...data.region.map(r => Bar({ key: r.label, label: r.label, pct: r.pct, color: TEAL })),
       ),
     ),
   );
@@ -741,20 +741,6 @@ function Home({ onOpen }) {
   );
 }
 
-
-  const [q, setQ] = useState("");
-  const rows = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    let r = ACCOUNTS.filter(a => !s || a.name.toLowerCase().includes(s) || a.biz.toLowerCase().includes(s) || a.id.includes(s));
-    r.sort((a, b) => {
-      const pa = pinned.includes(a.id) ? 0 : 1, pb = pinned.includes(b.id) ? 0 : 1;
-      if (pa !== pb) return pa - pb;
-      return a.name.localeCompare(b.name, "es");
-    });
-    return r.slice(0, 10);
-  }, [q, pinned]);
-
-  
 
 /* RangeControl */
 function RangeControl({ range, setRange }) {

@@ -135,26 +135,47 @@ async function fetchAccountMetrics(accountId, range, from, to) {
   const spend = parseFloat(ins.spend || 0);
   const conv = extractConv(ins.actions);
 
-  // Seguidores e interacciones IG desde acciones de los anuncios
-  const igFollows = extractAction(ins.actions, "follow");
-  const igProfileVisits = extractAction(ins.actions, "onsite_conversion.post_save") + extractAction(ins.actions, "page_engagement");
+  // Métricas de Instagram desde acciones de anuncios
+  // Visitas al perfil IG (acción directa de campañas de tráfico a IG)
+  const igProfileVisits = 
+    extractAction(ins.actions, "onsite_conversion.messaging_first_reply") === 0
+      ? extractAction(ins.actions, "visit_instagram_profile") +
+        extractAction(ins.actions, "onsite_conversion.view_content")
+      : 0;
 
-  // Intentar traer seguidores IG reales si la cuenta tiene IG conectado
-  let igFollowersDelta = igFollows; // fallback: seguidores por anuncios
+  // Seguidores nuevos de IG (acción "follow" en anuncios de IG)
+  const igFollows = extractAction(ins.actions, "follow");
+  let igFollowersDelta = igFollows;
+
+  // Si la cuenta tiene IG Business conectado, traer seguidores reales
   try {
     const igRes = await fbGet(`act_${accountId}`, { fields: "instagram_actor_id" });
     if (igRes.instagram_actor_id) {
+      // Traer seguidores via Instagram Graph API
       const igInsights = await fbGet(`${igRes.instagram_actor_id}/insights`, {
-        metric: "follower_count",
+        metric: "follower_count,profile_views",
         period: "day",
-        ...rp,
-      });
-      if (igInsights.data?.[0]?.values) {
-        const vals = igInsights.data[0].values;
-        igFollowersDelta = vals.reduce((s, v) => s + (v.value || 0), 0);
+        since: Math.floor((Date.now() - 8*86400000) / 1000),
+        until: Math.floor(Date.now() / 1000),
+      }).catch(() => null);
+      
+      if (igInsights?.data) {
+        const followerMetric = igInsights.data.find(d => d.name === "follower_count");
+        const profileMetric = igInsights.data.find(d => d.name === "profile_views");
+        if (followerMetric?.values) {
+          igFollowersDelta = followerMetric.values.reduce((s, v) => s + (v.value || 0), 0);
+        }
+        // Visitas al perfil IG orgánicas + pagas
+        if (profileMetric?.values && profileMetric.values.length > 0) {
+          const profileViews = profileMetric.values.reduce((s, v) => s + (v.value || 0), 0);
+          // Usar el mayor entre las dos fuentes
+          if (profileViews > igProfileVisits) {
+            Object.defineProperty(ins, '_ig_profile_visits', { value: profileViews, writable: true });
+          }
+        }
       }
     }
-  } catch { /* sin IG conectado, usamos el fallback */ }
+  } catch { /* sin IG conectado, usamos datos de acciones de anuncios */ }
 
   // Campañas
   const campInsData = campIns.data || [];
@@ -206,8 +227,8 @@ async function fetchAccountMetrics(accountId, range, from, to) {
       impressions: parseInt(ins.impressions||0),
       ctr: parseFloat(ins.ctr||0),
       clicks: parseInt(ins.clicks||0),
-      ig_follows: igFollowersDelta,
-      ig_profile_visits: Math.round(igProfileVisits),
+      ig_follows: Math.round(igFollowersDelta),
+      ig_profile_visits: Math.round(ins._ig_profile_visits || igProfileVisits),
     },
     prev_cost_per_msg: extractCPM(prevIns.cost_per_action_type, prevConv, prevSpend),
     campaigns,
@@ -298,11 +319,57 @@ async function fetchCampaignAds(campaignId, range, from, to) {
 /* ------------------------------------------------------------------ */
 /*  Análisis IA                                                         */
 /* ------------------------------------------------------------------ */
-async function fetchAnalysis(name, phrase, payload) {
-  const prompt = `Sos analista senior de Meta Ads en una agencia argentina. Analizá los datos de "${name}" (${phrase}).
-Datos: ${JSON.stringify(payload)}
-Devolvé SOLO JSON, español rioplatense, con números concretos:
-{"veredicto":"estado general en una frase","bueno":["hasta 3 puntos fuertes"],"malo":["hasta 3 problemas con recomendación"]}`;
+async function fetchAnalysis(name, phrase, payload, budgetConfig) {
+  const budgetContext = budgetConfig ? `
+PRESUPUESTO CONFIGURADO:
+- Presupuesto mensual del cliente: ${budgetConfig.currency} ${budgetConfig.budget}
+- Objetivo costo por mensaje: ${budgetConfig.targetCPM ? budgetConfig.currency + " " + budgetConfig.targetCPM : "no definido"}
+- Objetivo costo por clic: ${budgetConfig.targetCPC ? budgetConfig.currency + " " + budgetConfig.targetCPC : "no definido"}
+` : "";
+
+  const prompt = `Sos un agente de Paid Social especializado en Meta Ads trabajando en una agencia argentina de marketing digital. Tu rol combina auditoría de cuentas y estrategia de paid social.
+
+CUENTA BAJO ANÁLISIS: "${name}"
+PERÍODO: ${phrase}
+${budgetContext}
+
+DATOS DE PERFORMANCE:
+${JSON.stringify(payload, null, 2)}
+
+FRAMEWORK DE ANÁLISIS — aplicá estos criterios:
+
+1. ESTRUCTURA Y EFICIENCIA
+   - Frecuencia objetivo: 1.5-2.5 para prospecting, 3-5 para retargeting
+   - CTR saludable en Meta: 1%+ para tráfico, 0.5%+ para awareness
+   - Costo por mensaje: evaluá si está dentro del objetivo configurado o del promedio del rubro
+   - Campañas activas vs pausadas: ¿hay campañas activas sin gasto? señal de error
+
+2. INDICADORES DE ALARMA (reportar si se cumplen)
+   - CTR < 0.5%: creatividades agotadas o targeting equivocado
+   - 0 conversaciones con gasto activo: problema de configuración o embudo roto
+   - Costo por mensaje subió >15% vs período anterior: investigar causa
+   - Campañas activas con $0 de gasto: posible error de pago o límite de cuenta
+   - Alcance muy bajo con impresiones altas: frecuencia elevada, audiencia saturada
+
+3. OPORTUNIDADES DE MEJORA
+   - Basate en los datos reales, no en recomendaciones genéricas
+   - Mencioná números concretos del período analizado
+   - Si no hay datos suficientes, decilo explícitamente
+
+4. CONTEXTO ARGENTINO
+   - Considerá inflación al evaluar evolución de costos en ARS
+   - El costo por mensaje en ARS puede variar mucho por rubro (gastronomía $500-2000, inmobiliaria $3000-15000, servicios $1000-5000)
+   - Evaluá si el gasto es coherente con el presupuesto mensual informado
+
+Respondé SOLO con JSON en español rioplatense, sin markdown:
+{
+  "veredicto": "estado general en máximo 2 frases con los números más importantes",
+  "bueno": ["máximo 3 puntos fuertes con números concretos del período"],
+  "malo": ["máximo 3 problemas con recomendación accionable específica"],
+  "alerta_critica": null
+}
+
+Si hay un problema crítico (cuenta sin gasto, error de pago, 0 conversiones con gasto alto), ponelo en "alerta_critica" como string. Si no hay nada crítico, dejá null.`;
   for (const wait of [0, 3000, 8000]) {
     if (wait) await sleep(wait);
     try {
@@ -352,11 +419,11 @@ app.get("/api/account/:id", auth, async (req, res) => {
 
 app.post("/api/account/:id/analysis", auth, async (req, res) => {
   const { id } = req.params;
-  const { name, phrase, payload } = req.body;
+  const { name, phrase, payload, budgetConfig } = req.body;
   const ck = `an:${id}:${phrase}`;
   const cached = await cache.get(ck);
   if (cached) return res.json({ ...cached, fromCache: true });
-  try { const data = await fetchAnalysis(name, phrase, payload); await cache.set(ck, data); res.json({ ...data, fromCache: false }); }
+  try { const data = await fetchAnalysis(name, phrase, payload, budgetConfig); await cache.set(ck, data); res.json({ ...data, fromCache: false }); }
   catch(e) { res.status(503).json({ error: e.message }); }
 });
 
@@ -378,6 +445,72 @@ app.get("/api/campaign/:id/audience", auth, async (req, res) => {
   if (cached) return res.json({ ...cached, fromCache: true });
   try { const data = await fetchCampaignAudience(id, range, from, to); await cache.set(ck, data); res.json({ ...data, fromCache: false }); }
   catch(e) { console.error(`❌ audiencia ${id}:`, e.message); res.status(503).json({ error: e.message }); }
+});
+
+// Vista general — métricas de múltiples cuentas en paralelo (máx 6 simultáneas)
+app.post("/api/overview", auth, async (req, res) => {
+  const { accounts, range = "d7", from, to } = req.body;
+  if (!accounts || !Array.isArray(accounts) || accounts.length === 0) {
+    return res.status(400).json({ error: "Se requiere array de accounts" });
+  }
+
+  const results = {};
+  const queue = [...accounts];
+  const CONCURRENCY = 6;
+
+  async function processOne(id) {
+    const ck = `acc:${id}:${range==="custom"?`${from}:${to}`:range}`;
+    const cached = await cache.get(ck);
+    if (cached) { results[id] = { ...cached, fromCache: true }; return; }
+    try {
+      const data = await fetchAccountMetrics(id, range, from, to);
+      await cache.set(ck, data);
+      results[id] = { ...data, fromCache: false };
+    } catch(e) {
+      results[id] = { error: e.message };
+    }
+  }
+
+  // Procesar en paralelo con límite de concurrencia
+  let i = 0;
+  async function next() {
+    if (i >= queue.length) return;
+    const id = queue[i++];
+    await processOne(id);
+    return next();
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, next));
+
+  res.json(results);
+});
+
+// Guardar presupuestos/objetivos de cuentas (persiste en memoria/Redis)
+app.post("/api/budgets", auth, async (req, res) => {
+  const { budgets } = req.body; // { accountId: { budget, targetCPM, targetCPC, currency } }
+  if (!budgets) return res.status(400).json({ error: "Se requiere objeto budgets" });
+  await cache.set("global:budgets", budgets, 86400 * 30); // 30 días
+  res.json({ ok: true });
+});
+
+app.get("/api/budgets", auth, async (req, res) => {
+  const budgets = await cache.get("global:budgets") || {};
+  res.json(budgets);
+});
+
+// Estado real de una cuenta (account_status de Meta)
+app.get("/api/account/:id/status", auth, async (req, res) => {
+  try {
+    const data = await fbGet(`act_${req.params.id}`, { fields: "account_status,disable_reason,currency" });
+    // account_status: 1=Activa, 2=Desactivada, 3=Sin confirmar, 7=Pendiente revisión, 9=En cierre
+    // disable_reason: 0=Ninguno, 1=AUP, 2=Sin pago, 3=Abuso, 4=Integridad política, 5=tos
+    const statusMap = { 1:"activa", 2:"problema", 3:"sin_confirmar", 7:"en_revision", 9:"cerrando" };
+    const reasonMap = { 0:null, 1:"política", 2:"sin_pago", 3:"abuso", 4:"política", 5:"términos" };
+    res.json({
+      status: statusMap[data.account_status] || "desconocido",
+      reason: reasonMap[data.disable_reason] || null,
+      currency: data.currency,
+    });
+  } catch(e) { res.status(503).json({ error: e.message }); }
 });
 
 app.get("*", (_, res) => res.sendFile(path.join(__dirname, "../client/index.html")));

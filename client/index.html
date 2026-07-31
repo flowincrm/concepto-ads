@@ -297,7 +297,24 @@ function MonthlyChart({accountId,cur}){
       // X axis labels
       ...data.map(function(d,i){return h("text",{key:"x"+i,x:PL+i*xStep,y:H-10,fill:D.dim,fontSize:11,fontWeight:600,textAnchor:"middle"},d.label)}),
       // Y axis labels (conv)
-      ...[0,.5,1].map(function(f){return h("text",{key:"y"+f,x:PL-8,y:PT+ch*(1-f)+4,fill:D.dim,fontSize:9,textAnchor:"end"},Math.round(maxConv*f))})));
+      ...[0,.5,1].map(function(f){return h("text",{key:"y"+f,x:PL-8,y:PT+ch*(1-f)+4,fill:D.dim,fontSize:9,textAnchor:"end"},Math.round(maxConv*f))})),
+    h("div",{style:{display:"flex",justifyContent:"space-around",marginTop:10,paddingLeft:"60px",paddingRight:"20px"}},
+      ...data.map(function(d,i){
+        var mIdx=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].indexOf(d.label);
+        var mk=d.year+"-"+String(mIdx+1).padStart(2,"0");
+        var g=goals[mk];
+        return h("div",{key:"gi"+i,style:{flex:1,textAlign:"center",maxWidth:80}},
+          h("div",{style:{fontSize:8,color:"#0EA5E9",fontWeight:700,marginBottom:2}},"Obj. leads"),
+          editGoal===mk
+            ?h("input",{autoFocus:true,type:"number",value:goalInput,placeholder:"0",
+              onChange:function(e){setGoalInput(e.target.value)},
+              onBlur:function(){saveGoal(mk,goalInput);setEditGoal(null)},
+              onKeyDown:function(e){if(e.key==="Enter"){saveGoal(mk,goalInput);setEditGoal(null)}},
+              style:{width:"100%",background:"#151109",border:"1px solid #0EA5E9",borderRadius:4,color:"#F6F1E7",fontSize:10,padding:"2px 3px",outline:"none",textAlign:"center"}})
+            :h("button",{onClick:function(){setEditGoal(mk);setGoalInput(g||"")},
+              style:{background:"none",border:"1px dashed "+(g?"#0EA5E944":"#2C2317"),borderRadius:4,color:g?"#0EA5E9":"#7C7360",fontSize:10,fontWeight:600,padding:"2px 4px",cursor:"pointer",width:"100%"}},g||"+"))
+      }))
+  );
 }
 
 /* ================================================================ */
@@ -553,7 +570,7 @@ function Home({onOpen}){
               h("td",{style:Object.assign({},TD,{color:toNum(acc.ctr)>=1?D.green:D.text,fontWeight:toNum(acc.ctr)>=1?700:400}),onClick:function(){onOpen(a.id)}},m?pct(acc.ctr):"\u2014"),
               h("td",{style:TD,onClick:function(){onOpen(a.id)}},m?heroNum(acc.reach):"\u2014"),
               h("td",{style:TD,onClick:function(){onOpen(a.id)}},m?heroNum(acc.impressions):"\u2014"),
-              h("td",{style:Object.assign({},TD,{textAlign:"center",cursor:"pointer",userSelect:"none",fontSize:14}),onClick:function(e){e.stopPropagation()}},h("select",{value:taskSt,onChange:function(e){e.stopPropagation();updateSetting(a.id,"taskStatus",e.target.value);updateSetting(a.id,"taskWeek",currentWeek)},style:{background:taskSt==="done"?"#16321F":taskSt==="pending"?"#37280F":"#1F1810",color:taskSt==="done"?"#3FBE79":taskSt==="pending"?"#E6A93A":"#7C7360",border:"1px solid "+(taskSt==="done"?"#3FBE7944":taskSt==="pending"?"#E6A93A44":"#2C2317"),borderRadius:6,fontSize:10.5,fontWeight:700,padding:"3px 1px",cursor:"pointer",outline:"none",width:"100%",textAlign:"center"}},h("option",{value:"none"},"\u2014"),h("option",{value:"pending"},"\ud83d\udfe1 Pend."),h("option",{value:"done"},"\u2705 Hecho"))),
+              h("td",{style:Object.assign({},TD,{textAlign:"center",cursor:"pointer",userSelect:"none",fontSize:14}),onClick:function(e){e.stopPropagation()}},h("select",{value:taskSt,onChange:function(e){e.stopPropagation();var nv=e.target.value;setSettings(function(prev){var n=Object.assign({},prev);n[a.id]=Object.assign({},n[a.id]||{},{taskStatus:nv,taskWeek:currentWeek});return n});apiFetch("/api/settings/"+a.id,{method:"POST",body:JSON.stringify({taskStatus:nv,taskWeek:currentWeek})}).catch(function(){})},style:{background:taskSt==="done"?"#16321F":taskSt==="pending"?"#37280F":"#1F1810",color:taskSt==="done"?"#3FBE79":taskSt==="pending"?"#E6A93A":"#7C7360",border:"1px solid "+(taskSt==="done"?"#3FBE7944":taskSt==="pending"?"#E6A93A44":"#2C2317"),borderRadius:6,fontSize:10.5,fontWeight:700,padding:"3px 1px",cursor:"pointer",outline:"none",width:"100%",textAlign:"center"}},h("option",{value:"none"},"\u2014"),h("option",{value:"pending"},"\ud83d\udfe1 Pend."),h("option",{value:"done"},"\u2705 Hecho"))),
               extraCols&&h("td",{style:Object.assign({},TD,{color:"#C13584"}),onClick:function(){onOpen(a.id)}},m&&toNum(acc.ig_follows)>0?heroNum(acc.ig_follows):"\u2014"),
               extraCols&&h("td",{style:Object.assign({},TD,{color:"#C13584"}),onClick:function(){onOpen(a.id)}},m&&toNum(acc.ig_profile_visits)>0?heroNum(acc.ig_profile_visits):"\u2014"));
           })))),

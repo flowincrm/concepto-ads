@@ -265,10 +265,10 @@ function MonthlyChart({accountId,cur}){
   if(st==="loading")return h("div",{style:{marginTop:16,textAlign:"center",color:D.dim,padding:"20px 0"}},h("span",{className:"spin"},icon("Loader2",16,D.dim))," Cargando gr\u00e1fico mensual\u2026");
   if(st==="error"||!data||!data.length)return null;
 
-  const W=700,H=220,PL=60,PR=20,PT=30,PB=50;
+  const W=700,H=320,PL=60,PR=20,PT=30,PB=50;
   const cw=W-PL-PR,ch=H-PT-PB;
   const n=data.length;
-  const maxConv=Math.max(...data.map(function(d){return d.conversations||0}),1);
+  const allGoalVals=Object.values(goals).filter(function(v){return v}).map(Number);const maxConv=Math.max(...data.map(function(d){return d.conversations||0}),...allGoalVals,1);
   const maxCPM=Math.max(...data.map(function(d){return d.cost_per_msg||0}),1);
   const xStep=cw/(n-1||1);
 

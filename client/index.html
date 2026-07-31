@@ -248,11 +248,19 @@ function RangeControl({range,setRange}){
 function MonthlyChart({accountId,cur}){
   const[st,setSt]=useState("idle");
   const[data,setData]=useState(null);
+  const[goals,setGoals]=useState({});
+  const[editGoal,setEditGoal]=useState(null);
+  const[goalInput,setGoalInput]=useState("");
   const load=async function(){
     setSt("loading");
-    try{const d=await apiFetch(`/api/account/${accountId}/monthly`);setData(d);setSt("done")}
-    catch(e){setSt("error")}
+    try{
+      const d=await apiFetch(`/api/account/${accountId}/monthly`);setData(d);
+      const s=await apiFetch("/api/settings").catch(function(){return{}});
+      setGoals((s[accountId]||{}).monthlyGoals||{});
+      setSt("done");
+    }catch(e){setSt("error")}
   };
+  const saveGoal=function(mk,val){var ng=Object.assign({},goals);ng[mk]=val===""?null:+val;setGoals(ng);apiFetch("/api/settings/"+accountId,{method:"POST",body:JSON.stringify({monthlyGoals:ng})}).catch(function(){})};
   useEffect(function(){load()},[accountId]);
   if(st==="loading")return h("div",{style:{marginTop:16,textAlign:"center",color:D.dim,padding:"20px 0"}},h("span",{className:"spin"},icon("Loader2",16,D.dim))," Cargando gr\u00e1fico mensual\u2026");
   if(st==="error"||!data||!data.length)return null;
@@ -274,7 +282,7 @@ function MonthlyChart({accountId,cur}){
       h("span",{style:{fontSize:12.5,fontWeight:800,color:D.text,letterSpacing:.3}},"RENDIMIENTO MENSUAL"),
       h("div",{style:{marginLeft:"auto",display:"flex",gap:14,fontSize:11}},
         h("span",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{style:{width:12,height:3,background:D.orange,borderRadius:2,display:"inline-block"}}),h("span",{style:{color:D.dim}},"Conversaciones")),
-        h("span",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{style:{width:12,height:3,background:D.amber,borderRadius:2,display:"inline-block"}}),h("span",{style:{color:D.dim}},"Costo/msj")))),
+        h("span",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{style:{width:12,height:3,background:D.amber,borderRadius:2,display:"inline-block"}}),h("span",{style:{color:D.dim}},"Costo/msj")),h("span",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{style:{width:12,height:3,background:"#0EA5E9",borderRadius:2,display:"inline-block"}}),h("span",{style:{color:D.dim}},"Obj. leads")))),
     h("svg",{viewBox:`0 0 ${W} ${H}`,style:{width:"100%",height:"auto"}},
       // Grid lines
       ...[0,.25,.5,.75,1].map(function(f){var y=PT+ch*(1-f);return h("line",{key:"g"+f,x1:PL,y1:y,x2:PL+cw,y2:y,stroke:D.lineSoft,strokeWidth:.5})}),
@@ -381,7 +389,7 @@ function Detail({account,range,setRange}){
 
     data&&h("div",null,
       /* Hero stats */
-      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(155px,1fr))",gap:10}},
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(155px,1fr))",gap:10,background:"linear-gradient(135deg,#2A1E0E 0%,#1F1810 100%)",border:"1px solid #F2740B33",borderRadius:16,padding:14}},
         h(Stat,{iconName:"DollarSign",label:"Gasto total",value:heroMoney(acc.spend,cur),tint:D.orange}),
         h(Stat,{iconName:"MessageCircle",label:"Conversaciones",value:heroNum(acc.conversations)}),
         h(Stat,{iconName:"Target",label:"Costo por mensaje",value:heroCost(acc.cost_per_msg,cur),trend:trendCPM}),
@@ -411,6 +419,8 @@ function Detail({account,range,setRange}){
           ...alerts.map(function(al,i){var sc=sevColor[al.sev];return h("div",{key:i,style:{display:"flex",gap:9,alignItems:"flex-start",background:sc[1],border:`1px solid ${sc[0]}33`,borderRadius:10,padding:"10px 12px"}},icon(al.sev==="green"?"CheckCircle2":"AlertTriangle",15,sc[0]),h("span",{style:{fontSize:12.5,color:D.text,lineHeight:1.5}},al.text))}))),
 
       /* Resumen IA */
+            h(MonthlyChart,{accountId:account.id,cur}),
+
       h("div",{style:{marginTop:16,background:D.card,border:`1px solid ${D.line}`,borderRadius:14,padding:"14px 15px"}},
         h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12}},icon("Sparkles",15,D.orange),h("span",{style:{fontSize:12.5,fontWeight:800,color:D.text,letterSpacing:.3}},"RESUMEN IA"),anSt==="loading"&&h("span",{className:"spin",style:{marginLeft:4}},icon("Loader2",13,D.faint))),
         anSt==="loading"&&h("div",{style:{fontSize:12.5,color:D.faint}},"Analizando\u2026"),
@@ -422,8 +432,7 @@ function Detail({account,range,setRange}){
             h("div",{style:{background:D.redSoft,borderRadius:10,padding:"11px 13px"}},h("div",{style:{fontSize:11,fontWeight:800,color:D.red,marginBottom:7,letterSpacing:.3}},"A MEJORAR"),...(an.malo||[]).map(function(t,i){return h("div",{key:i,style:{fontSize:12.5,color:D.text,lineHeight:1.5,marginBottom:6,display:"flex",gap:7}},h("span",{style:{color:D.red}},"\u2013"),t)}))))),
 
       /* Gráfico mensual */
-      h(MonthlyChart,{accountId:account.id,cur}),
-
+      
       ts&&h("div",{style:{fontSize:11,color:D.faint,textAlign:"center",marginTop:16,lineHeight:1.6}},"Datos "+(data.fromCache?"\ud83d\udce6 cach\u00e9":"\ud83d\udd34 en vivo")+" \u00b7 actualizado "+ago(ts))));
 }
 
@@ -544,7 +553,7 @@ function Home({onOpen}){
               h("td",{style:Object.assign({},TD,{color:toNum(acc.ctr)>=1?D.green:D.text,fontWeight:toNum(acc.ctr)>=1?700:400}),onClick:function(){onOpen(a.id)}},m?pct(acc.ctr):"\u2014"),
               h("td",{style:TD,onClick:function(){onOpen(a.id)}},m?heroNum(acc.reach):"\u2014"),
               h("td",{style:TD,onClick:function(){onOpen(a.id)}},m?heroNum(acc.impressions):"\u2014"),
-              h("td",{style:Object.assign({},TD,{textAlign:"center",cursor:"pointer",userSelect:"none",fontSize:14}),onClick:function(e){e.stopPropagation();e.preventDefault();updateSetting(a.id,"taskStatus",nextTask[taskSt]||"pending");updateSetting(a.id,"taskWeek",currentWeek)}},taskSt==="done"?"\u2705":taskSt==="pending"?"\ud83d\udfe1":"\u25cb"),
+              h("td",{style:Object.assign({},TD,{textAlign:"center",cursor:"pointer",userSelect:"none",fontSize:14}),onClick:function(e){e.stopPropagation()}},h("select",{value:taskSt,onChange:function(e){e.stopPropagation();updateSetting(a.id,"taskStatus",e.target.value);updateSetting(a.id,"taskWeek",currentWeek)},style:{background:taskSt==="done"?"#16321F":taskSt==="pending"?"#37280F":"#1F1810",color:taskSt==="done"?"#3FBE79":taskSt==="pending"?"#E6A93A":"#7C7360",border:"1px solid "+(taskSt==="done"?"#3FBE7944":taskSt==="pending"?"#E6A93A44":"#2C2317"),borderRadius:6,fontSize:10.5,fontWeight:700,padding:"3px 1px",cursor:"pointer",outline:"none",width:"100%",textAlign:"center"}},h("option",{value:"none"},"\u2014"),h("option",{value:"pending"},"\ud83d\udfe1 Pend."),h("option",{value:"done"},"\u2705 Hecho"))),
               extraCols&&h("td",{style:Object.assign({},TD,{color:"#C13584"}),onClick:function(){onOpen(a.id)}},m&&toNum(acc.ig_follows)>0?heroNum(acc.ig_follows):"\u2014"),
               extraCols&&h("td",{style:Object.assign({},TD,{color:"#C13584"}),onClick:function(){onOpen(a.id)}},m&&toNum(acc.ig_profile_visits)>0?heroNum(acc.ig_profile_visits):"\u2014"));
           })))),

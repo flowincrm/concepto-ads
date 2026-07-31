@@ -297,7 +297,23 @@ function MonthlyChart({accountId,cur}){
       // X axis labels
       ...data.map(function(d,i){return h("text",{key:"x"+i,x:PL+i*xStep,y:H-10,fill:D.dim,fontSize:11,fontWeight:600,textAnchor:"middle"},d.label)}),
       // Y axis labels (conv)
-      ...[0,.5,1].map(function(f){return h("text",{key:"y"+f,x:PL-8,y:PT+ch*(1-f)+4,fill:D.dim,fontSize:9,textAnchor:"end"},Math.round(maxConv*f))})),
+      ...[0,.5,1].map(function(f){return h("text",{key:"y"+f,x:PL-8,y:PT+ch*(1-f)+4,fill:D.dim,fontSize:9,textAnchor:"end"},Math.round(maxConv*f))}),
+      // Línea de objetivo (azul)
+      (function(){
+        var goalPts=[];
+        data.forEach(function(d,i){
+          var mIdx=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].indexOf(d.label);
+          var mk=d.year+"-"+String(mIdx+1).padStart(2,"0");
+          var g=goals[mk];
+          if(g)goalPts.push({x:PL+i*xStep,y:Math.max(PT,Math.min(PT+ch,PT+ch-(g/maxConv)*ch)),val:g});
+        });
+        if(goalPts.length<2)return null;
+        var pathD=goalPts.map(function(p,i){return(i===0?"M":"L")+p.x+","+p.y}).join(" ");
+        return h("g",{key:"goals-line"},
+          h("path",{d:pathD,fill:"none",stroke:"#0EA5E9",strokeWidth:2,strokeLinejoin:"round"}),
+          ...goalPts.map(function(p,i){return h("g",{key:"gd"+i},
+            h("circle",{cx:p.x,cy:p.y,r:4,fill:"#0EA5E9"}))}));
+      })()),
     h("div",{style:{display:"flex",justifyContent:"space-around",marginTop:10,paddingLeft:"60px",paddingRight:"20px"}},
       ...data.map(function(d,i){
         var mIdx=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].indexOf(d.label);

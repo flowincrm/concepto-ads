@@ -631,7 +631,8 @@ app.get("/api/accounts", auth, async (req, res) => {
     }
     
     // Filtrar cuentas activas y con acceso (status 1 = activa)
-    const active = allAccounts.filter(a => a.status === 1);
+    // Status: 1=activa, 2=desactivada, 3=sin confirmar, 7=en revisión, 9=período de gracia
+    const active = allAccounts.filter(a => [1, 3, 7, 9].includes(a.status));
     
     await cache.set(ck, active, 3600); // 1 hora
     console.log(`📋 ${active.length} cuentas activas de ${allAccounts.length} totales`);

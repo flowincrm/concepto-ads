@@ -125,7 +125,7 @@ async function fetchAccountMetrics(accountId, range, from, to) {
 
   const [accIns, prevAccIns, campIns, accInfo] = await Promise.all([
     fbGet(`act_${accountId}/insights`, { fields: ACC_FIELDS, level: "account", ...rp }),
-    fbGet(`act_${accountId}/insights`, { fields: "spend,actions,cost_per_action_type", level: "account", ...prevRp }),
+    fbGet(`act_${accountId}/insights`, { fields: "spend,clicks,ctr,actions,cost_per_action_type", level: "account", ...prevRp }),
     fbGet(`act_${accountId}/insights`, { fields: INS_FIELDS, level: "campaign", ...rp, limit: "25", sort: "spend_descending" }),
     fbGet(`act_${accountId}`, { fields: "currency,name" }),
   ]);
@@ -217,6 +217,9 @@ async function fetchAccountMetrics(accountId, range, from, to) {
 
   const prevSpend = parseFloat(prevIns.spend || 0);
   const prevConv = extractConv(prevIns.actions);
+  const prevClicks = parseInt(prevIns.clicks || 0);
+  const prevCtr = parseFloat(prevIns.ctr || 0);
+  const prevCPC = prevClicks > 0 ? prevSpend / prevClicks : 0;
 
   return {
     currency: accInfo.currency || "ARS",
@@ -231,6 +234,9 @@ async function fetchAccountMetrics(accountId, range, from, to) {
       ig_profile_visits: Math.round(ins._ig_profile_visits || igProfileVisits),
     },
     prev_cost_per_msg: extractCPM(prevIns.cost_per_action_type, prevConv, prevSpend),
+    prev_conversations: prevConv,
+    prev_ctr: prevCtr,
+    prev_cpc: prevCPC,
     campaigns,
   };
 }
@@ -637,5 +643,40 @@ app.get("/api/accounts", auth, async (req, res) => {
 });
 
 app.get("*", (_, res) => res.sendFile(path.join(__dirname, "../client/index.html")));
+
+// Slack alerts
+const SLACK_WEBHOOK = process.env.SLACK_WEBHOOK_URL;
+async function checkAccountAlerts() {
+  if (!SLACK_WEBHOOK) return;
+  try {
+    const resp = await fetch(`${FB}/me/adaccounts?fields=account_id,name,account_status,balance,currency&limit=100&access_token=${META_TOKEN}`, { signal: AbortSignal.timeout(30000) });
+    const data = await resp.json();
+    if (data.error) return;
+    const alerts = [];
+    const settings = await cache.get("global:settings") || {};
+    for (const acc of (data.data || [])) {
+      const name = acc.name || acc.account_id;
+      if (acc.account_status === 2) alerts.push("\ud83d\udd34 *" + name + "*: cuenta desactivada (posible error de pago)");
+      const balance = Math.abs(parseInt(acc.balance || 0)) / 100;
+      if (balance > 0 && balance <= 10000 && acc.account_status === 1) alerts.push("\u26a0\ufe0f *" + name + "*: saldo bajo \u2014 " + acc.currency + " " + balance.toLocaleString("es-AR"));
+      const s = settings[acc.account_id];
+      if (s && s.budget) {
+        try {
+          const ir = await fetch(`${FB}/act_${acc.account_id}/insights?fields=spend&date_preset=this_month&level=account&access_token=${META_TOKEN}`, { signal: AbortSignal.timeout(15000) });
+          const id = await ir.json();
+          const ms = parseFloat(id.data?.[0]?.spend || 0);
+          const pct = s.budget > 0 ? Math.round(ms / s.budget * 100) : 0;
+          if (pct >= 90) alerts.push("\ud83d\udcb0 *" + name + "*: " + pct + "% del presupuesto mensual ejecutado");
+        } catch {}
+      }
+    }
+    if (alerts.length > 0) {
+      await fetch(SLACK_WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "\ud83d\udcca *Meta Ads \u2014 Alertas Concepto*\n" + alerts.join("\n") }) });
+      console.log("\ud83d\udce2 Slack: " + alerts.length + " alertas");
+    }
+  } catch (e) { console.error("Slack error:", e.message); }
+}
+app.get("/api/check-alerts", auth, async (req, res) => { await checkAccountAlerts(); res.json({ ok: true }); });
+if (SLACK_WEBHOOK) { setInterval(checkAccountAlerts, 3600000); setTimeout(checkAccountAlerts, 30000); console.log("\ud83d\udce2 Slack alerts activadas"); }
 
 createServer(app).listen(PORT, () => console.log(`🚀 Puerto ${PORT} | ${redis?"Redis":"Memoria"} ${CACHE_TTL}s`));

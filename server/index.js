@@ -649,18 +649,38 @@ const SLACK_WEBHOOK = process.env.SLACK_WEBHOOK_URL;
 async function checkAccountAlerts() {
   if (!SLACK_WEBHOOK) return;
   try {
-    const resp = await fetch(`${FB}/me/adaccounts?fields=account_id,name,account_status,balance,currency&limit=100&access_token=${META_TOKEN}`, { signal: AbortSignal.timeout(30000) });
+    // Traer cuentas con info de facturación
+    const resp = await fetch(`${FB}/me/adaccounts?fields=account_id,name,account_status,disable_reason,balance,currency,is_prepay_account,funding_source_details&limit=100&access_token=${META_TOKEN}`, { signal: AbortSignal.timeout(30000) });
     const data = await resp.json();
     if (data.error) return;
     const alerts = [];
     const settings = await cache.get("global:settings") || {};
     for (const acc of (data.data || [])) {
       const name = acc.name || acc.account_id;
-      if (acc.account_status === 2) alerts.push("\ud83d\udd34 *" + name + "*: cuenta desactivada (posible error de pago)");
-      const balance = Math.abs(parseInt(acc.balance || 0)) / 100;
-      if (balance > 0 && balance <= 10000 && acc.account_status === 1) alerts.push("\u26a0\ufe0f *" + name + "*: saldo bajo \u2014 " + acc.currency + " " + balance.toLocaleString("es-AR"));
+      const isPrepay = acc.is_prepay_account || false;
+      const balance = parseInt(acc.balance || 0) / 100;
+
+      if (isPrepay) {
+        // PREPAGO: alertar cuando quedan pocos fondos
+        // balance es positivo = fondos disponibles
+        if (balance > 0 && balance <= 10000 && acc.account_status === 1) {
+          alerts.push("\u26a0\ufe0f *" + name + "* (prepago): fondos bajos \u2014 " + acc.currency + " " + Math.round(balance).toLocaleString("es-AR") + " restantes");
+        }
+        if (balance <= 0 && acc.account_status === 1) {
+          alerts.push("\ud83d\udd34 *" + name + "* (prepago): sin fondos \u2014 cargar saldo urgente");
+        }
+      } else {
+        // TARJETA/CRÉDITO: alertar solo si hay error de pago real
+        // account_status 2 = desactivada, disable_reason 2 = sin pago
+        if (acc.account_status === 2) {
+          const reason = acc.disable_reason === 2 ? "error de pago" : acc.disable_reason === 1 ? "pol\u00edtica" : "desactivada";
+          alerts.push("\ud83d\udd34 *" + name + "* (tarjeta): " + reason + " \u2014 revisar m\u00e9todo de pago");
+        }
+      }
+
+      // Presupuesto casi agotado (para ambos tipos)
       const s = settings[acc.account_id];
-      if (s && s.budget) {
+      if (s && s.budget && acc.account_status === 1) {
         try {
           const ir = await fetch(`${FB}/act_${acc.account_id}/insights?fields=spend&date_preset=this_month&level=account&access_token=${META_TOKEN}`, { signal: AbortSignal.timeout(15000) });
           const id = await ir.json();
@@ -673,6 +693,8 @@ async function checkAccountAlerts() {
     if (alerts.length > 0) {
       await fetch(SLACK_WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "\ud83d\udcca *Meta Ads \u2014 Alertas Concepto*\n" + alerts.join("\n") }) });
       console.log("\ud83d\udce2 Slack: " + alerts.length + " alertas");
+    } else {
+      console.log("\ud83d\udce2 Sin alertas");
     }
   } catch (e) { console.error("Slack error:", e.message); }
 }

@@ -488,6 +488,7 @@ function Home({onOpen}){
   useEffect(function(){
     apiFetch("/api/accounts").then(function(a){if(a&&a.length)setAccounts(a)}).catch(function(){});
     apiFetch("/api/settings").then(function(s){setSettings(s||{})}).catch(function(){});
+    apiFetch("/api/pinned").then(function(p){if(p&&p.length){setPinned(p);localStorage.setItem("cc_pinned",JSON.stringify(p))}}).catch(function(){});
   },[]);
 
   const updateSetting=async function(id,key,val){
@@ -500,6 +501,7 @@ function Home({onOpen}){
   const togglePin=function(id){
     var nx=pinned.includes(id)?pinned.filter(function(x){return x!==id}):[].concat(pinned,[id]);
     setPinned(nx);localStorage.setItem("cc_pinned",JSON.stringify(nx));
+    apiFetch("/api/pinned",{method:"POST",body:JSON.stringify({pinned:nx})}).catch(function(){});
   };
 
   const loadAll=async function(){

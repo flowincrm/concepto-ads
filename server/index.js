@@ -656,7 +656,12 @@ async function checkAccountAlerts() {
     if (data.error) return;
     const alerts = [];
     const settings = await cache.get("global:settings") || {};
-    for (const acc of (data.data || [])) {
+    const pinnedIds = await cache.get("global:pinned") || [];
+    // Solo monitorear cuentas favoritas
+    const monitored = pinnedIds.length > 0
+      ? (data.data || []).filter(a => pinnedIds.includes(a.account_id))
+      : [];
+    for (const acc of monitored) {
       const name = acc.name || acc.account_id;
       const isPrepay = acc.is_prepay_account || false;
       const balance = parseInt(acc.balance || 0) / 100;
@@ -699,6 +704,18 @@ async function checkAccountAlerts() {
     }
   } catch (e) { console.error("Slack error:", e.message); }
 }
+// Favoritas sincronizadas con el servidor
+app.get("/api/pinned", auth, async (req, res) => {
+  const pinned = await cache.get("global:pinned") || [];
+  res.json(pinned);
+});
+app.post("/api/pinned", auth, async (req, res) => {
+  const { pinned } = req.body;
+  if (!Array.isArray(pinned)) return res.status(400).json({ error: "Se requiere array" });
+  await cache.set("global:pinned", pinned, 86400 * 90);
+  res.json({ ok: true });
+});
+
 app.get("/api/check-alerts", auth, async (req, res) => { await checkAccountAlerts(); res.json({ ok: true }); });
 if (SLACK_WEBHOOK) { setInterval(checkAccountAlerts, 3600000); setTimeout(checkAccountAlerts, 30000); console.log("\ud83d\udce2 Slack alerts activadas"); }
 

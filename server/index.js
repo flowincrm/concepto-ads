@@ -664,7 +664,7 @@ async function checkAccountAlerts() {
     for (const acc of monitored) {
       const name = acc.name || acc.account_id;
       const isPrepay = acc.is_prepay_account || false;
-      const balance = parseInt(acc.balance || 0) / 100;
+      const balance = parseInt(acc.balance || 0);
 
       if (isPrepay) {
         // PREPAGO: alertar cuando quedan pocos fondos

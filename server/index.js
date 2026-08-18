@@ -674,11 +674,11 @@ async function checkAccountAlerts() {
           alerts.push("\ud83d\udd34 *" + name + "* (prepago): sin fondos \u2014 cargar saldo urgente");
         }
       } else {
-        // TARJETA/CRÉDITO: alertar solo si hay error de pago real
-        // account_status 2 = desactivada, disable_reason 2 = sin pago
+        // TARJETA: alertar si hay error de pago (status 2=desactivada, 3=pago pendiente)
         if (acc.account_status === 2) {
-          const reason = acc.disable_reason === 2 ? "error de pago" : acc.disable_reason === 1 ? "pol\u00edtica" : "desactivada";
-          alerts.push("\ud83d\udd34 *" + name + "* (tarjeta): " + reason + " \u2014 revisar m\u00e9todo de pago");
+          alerts.push("\ud83d\udd34 *" + name + "* (tarjeta): cuenta desactivada \u2014 revisar m\u00e9todo de pago");
+        } else if (acc.account_status === 3) {
+          alerts.push("\u26a0\ufe0f *" + name + "* (tarjeta): pago pendiente/rechazado \u2014 revisar facturaci\u00f3n");
         }
       }
 

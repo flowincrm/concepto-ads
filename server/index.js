@@ -643,6 +643,38 @@ app.get("/api/accounts", auth, async (req, res) => {
   }
 });
 
+// Favoritas sincronizadas con el servidor
+app.get("/api/pinned", auth, async (req, res) => {
+  const pinned = await cache.get("global:pinned") || [];
+  res.json(pinned);
+});
+app.post("/api/pinned", auth, async (req, res) => {
+  const { pinned } = req.body;
+  if (!Array.isArray(pinned)) return res.status(400).json({ error: "Se requiere array" });
+  await cache.set("global:pinned", pinned, 86400 * 90);
+  res.json({ ok: true });
+});
+
+app.get("/api/check-alerts", auth, async (req, res) => { await checkAccountAlerts(); res.json({ ok: true }); });
+if (SLACK_WEBHOOK) {
+  // Alertas a las 08:00, 12:00 y 18:00 hora Argentina (UTC-3)
+  const ALERT_HOURS = [8, 12, 18];
+  let lastAlertHour = null;
+  setInterval(() => {
+    const now = new Date();
+    const argHour = (now.getUTCHours() - 3 + 24) % 24;
+    const argMin = now.getUTCMinutes();
+    if (ALERT_HOURS.includes(argHour) && argMin < 5 && lastAlertHour !== argHour) {
+      lastAlertHour = argHour;
+      console.log("\ud83d\udce2 Alerta programada " + argHour + ":00 AR");
+      checkAccountAlerts();
+    }
+    if (!ALERT_HOURS.includes(argHour)) lastAlertHour = null;
+  }, 60000); // chequea cada minuto
+  console.log("\ud83d\udce2 Slack alerts: 08:00, 12:00, 18:00 hora Argentina");
+}
+
+
 app.get("*", (_, res) => res.sendFile(path.join(__dirname, "../client/index.html")));
 
 // Slack alerts
@@ -704,35 +736,4 @@ async function checkAccountAlerts() {
     }
   } catch (e) { console.error("Slack error:", e.message); }
 }
-// Favoritas sincronizadas con el servidor
-app.get("/api/pinned", auth, async (req, res) => {
-  const pinned = await cache.get("global:pinned") || [];
-  res.json(pinned);
-});
-app.post("/api/pinned", auth, async (req, res) => {
-  const { pinned } = req.body;
-  if (!Array.isArray(pinned)) return res.status(400).json({ error: "Se requiere array" });
-  await cache.set("global:pinned", pinned, 86400 * 90);
-  res.json({ ok: true });
-});
-
-app.get("/api/check-alerts", auth, async (req, res) => { await checkAccountAlerts(); res.json({ ok: true }); });
-if (SLACK_WEBHOOK) {
-  // Alertas a las 08:00, 12:00 y 18:00 hora Argentina (UTC-3)
-  const ALERT_HOURS = [8, 12, 18];
-  let lastAlertHour = null;
-  setInterval(() => {
-    const now = new Date();
-    const argHour = (now.getUTCHours() - 3 + 24) % 24;
-    const argMin = now.getUTCMinutes();
-    if (ALERT_HOURS.includes(argHour) && argMin < 5 && lastAlertHour !== argHour) {
-      lastAlertHour = argHour;
-      console.log("\ud83d\udce2 Alerta programada " + argHour + ":00 AR");
-      checkAccountAlerts();
-    }
-    if (!ALERT_HOURS.includes(argHour)) lastAlertHour = null;
-  }, 60000); // chequea cada minuto
-  console.log("\ud83d\udce2 Slack alerts: 08:00, 12:00, 18:00 hora Argentina");
-}
-
 createServer(app).listen(PORT, () => console.log(`🚀 Puerto ${PORT} | ${redis?"Redis":"Memoria"} ${CACHE_TTL}s`));

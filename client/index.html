@@ -420,12 +420,15 @@ function Detail({account,range,setRange}){
       h(RangeControl,{range,setRange}),
       h("button",{onClick:function(){
         if(st!=="done"||!data)return;
+        var w=window.open("","_blank","width=800,height=900");
+        if(!w){alert("Permit\u00ed las ventanas emergentes para exportar");return}
+        w.document.write("<html><body style=\"padding:40px;font-family:Arial;color:#888\"><p>Generando reporte...</p></body></html>");
         apiFetch("/api/account/"+account.id+"/monthly").then(function(md){
           apiFetch("/api/settings").then(function(s){
             var g=(s[account.id]||{}).monthlyGoals||{};
-            exportPDF(account,data,alerts,range,md,g);
-          }).catch(function(){exportPDF(account,data,alerts,range,md,{})});
-        }).catch(function(){exportPDF(account,data,alerts,range,[],{})});
+            exportPDF(account,data,alerts,range,md,g,w);
+          }).catch(function(){exportPDF(account,data,alerts,range,md,{},w)});
+        }).catch(function(){exportPDF(account,data,alerts,range,[],{},w)});
       },disabled:st!=="done",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.orange}`,background:D.orangeSoft,color:D.orange,cursor:"pointer",opacity:st!=="done"?.5:1}},icon("Download",14,D.orange),"Exportar PDF"),
       h("button",{onClick:function(){run(true)},disabled:st==="loading",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.text,cursor:"pointer",opacity:st==="loading"?.6:1}},st==="loading"?h("span",{className:"spin"},icon("Loader2",14)):icon("RefreshCw",14),st==="loading"?"Trayendo\u2026":"Actualizar")),
 
@@ -572,7 +575,7 @@ function Home({onOpen}){
     var changeTxt=isMoney?(pctD>0?diffTxt+" m\u00e1s caro":diffTxt+" m\u00e1s barato"):(pctD>0?diffTxt+" m\u00e1s":diffTxt+" menos");
     return h("span",{className:"tip"},content,h("div",{className:"tipbox"},h("div",{style:{fontSize:10,color:"#7C7360",marginBottom:4}},"7 d\u00edas anteriores"),h("div",{style:{fontSize:14,fontWeight:700,color:"#F6F1E7"}},isMoney?heroCost(prevVal,cur):heroNum(prevVal)),h("div",{style:{fontSize:10,color:color,marginTop:2}},arrow+" "+Math.abs(pctD)+"% ("+changeTxt+")")));
   };
-  const exportPDF=function(account,data,alerts,range,monthlyData,goals){
+  const exportPDF=function(account,data,alerts,range,monthlyData,goals,w){
     var cur=data.currency||account.cur;
     var acc=data.account||{};
     var phrase=range.key==="d7"?"\u00daltimos 7 d\u00edas":range.key==="d30"?"\u00daltimos 30 d\u00edas":range.from+" al "+range.to;
@@ -664,8 +667,7 @@ function Home({onOpen}){
       +'<div>Generado por Concepto Agencia</div><div>'+today+'</div></div>'
       +'</body></html>';
 
-    var w=window.open("","_blank","width=800,height=900");
-    if(w){w.document.write(doc);w.document.close();setTimeout(function(){w.print()},500)}
+    w.document.open();w.document.write(doc);w.document.close();setTimeout(function(){w.print()},500);
   };
     const statusInfo=function(m){
     if(!m||m.error)return{color:D.faint,bg:D.lineSoft,label:"..."};

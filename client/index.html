@@ -423,12 +423,13 @@ function Detail({account,range,setRange}){
         var w=window.open("","_blank","width=800,height=900");
         if(!w){alert("Permit\u00ed las ventanas emergentes para exportar");return}
         w.document.write("<html><body style=\"padding:40px;font-family:Arial;color:#888\"><p>Generando reporte...</p></body></html>");
-        apiFetch("/api/account/"+account.id+"/monthly").then(function(md){
-          apiFetch("/api/settings").then(function(s){
-            var g=(s[account.id]||{}).monthlyGoals||{};
-            exportPDF(account,data,alerts,range,md,g,w);
-          }).catch(function(){exportPDF(account,data,alerts,range,md,{},w)});
-        }).catch(function(){exportPDF(account,data,alerts,range,[],{},w)});
+        var done=false;
+        var finish=function(md,g){if(done)return;done=true;try{exportPDF(account,data,alerts,range,md||[],g||{},w)}catch(e){w.document.open();w.document.write("<html><body><p>Error: "+e.message+"</p></body></html>");w.document.close()}};
+        Promise.all([
+          apiFetch("/api/account/"+account.id+"/monthly").catch(function(){return[]}),
+          apiFetch("/api/settings").catch(function(){return{}})
+        ]).then(function(r){finish(r[0],(r[1][account.id]||{}).monthlyGoals)}).catch(function(){finish([],{})});
+        setTimeout(function(){finish([],{})},10000);
       },disabled:st!=="done",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.orange}`,background:D.orangeSoft,color:D.orange,cursor:"pointer",opacity:st!=="done"?.5:1}},icon("Download",14,D.orange),"Exportar PDF"),
       h("button",{onClick:function(){run(true)},disabled:st==="loading",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.text,cursor:"pointer",opacity:st==="loading"?.6:1}},st==="loading"?h("span",{className:"spin"},icon("Loader2",14)):icon("RefreshCw",14),st==="loading"?"Trayendo\u2026":"Actualizar")),
 

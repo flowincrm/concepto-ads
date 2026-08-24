@@ -128,7 +128,7 @@ function exportPDF(account,data,alerts,range,monthlyData,goals,w){
     var trendTxt=trendCPM!==null?'<div style="font-size:10px;color:'+(trendCPM>0?"#D85A30":"#2D7A4F")+';margin-top:2px">'+(trendCPM>0?"+":"")+trendCPM+'% vs. anterior</div>':"";
 
     var doc='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reporte '+account.name+'</title>'
-      +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#1a1a1a;padding:32px 28px}@media print{body{padding:20px}}</style></head><body>'
+      +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#1a1a1a;padding:24px 22px}@media print{body{padding:16px}@page{margin:8mm;size:A4}}</style></head><body>'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #F2740B">'
       +'<div><div style="font-size:11px;color:#F2740B;font-weight:700;letter-spacing:1px;text-transform:uppercase">Reporte de performance</div>'
       +'<div style="font-size:22px;font-weight:700;margin-top:4px">'+account.name+'</div>'
@@ -163,7 +163,7 @@ function exportPDF(account,data,alerts,range,monthlyData,goals,w){
       +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#F2740B;border-radius:2px;display:inline-block"></span> Real</span>'
       +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border:1.5px solid #ccc;border-radius:2px;display:inline-block;background:transparent"></span> Objetivo</span>'
       +'</div></div>'
-      +'<div style="display:flex;align-items:flex-end;gap:6px;padding:0 4px;height:200px">'+chartBars+'</div></div>':'')
+      +'<div style="display:flex;align-items:flex-end;gap:6px;padding:0 4px;height:240px">'+chartBars+'</div></div>':'')
 
       +'<div style="border-top:0.5px solid #E5E5E5;padding-top:12px;display:flex;justify-content:space-between;font-size:10px;color:#bbb">'
       +'<div>Generado por Concepto Agencia</div><div>'+today+'</div></div>'

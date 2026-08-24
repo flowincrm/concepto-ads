@@ -97,10 +97,9 @@ function exportPDF(account,data,alerts,range,monthlyData,goals,w){
       var diffColor=diff!==null?(diff>=0?"#2D7A4F":"#D85A30"):"";
       var diffBg=diff!==null?(diff>=0?"#E8F5E9":"#FEE9E1"):"";
       return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end">'
-        +'<div style="font-size:9px;color:#D85A30;font-weight:700;margin-bottom:3px">'+d.conversations+'</div>'
         +'<div style="position:relative;width:100%">'
         +(g?'<div style="width:100%;height:'+goalH+'px;border:1.5px solid #ddd;border-radius:4px 4px 0 0;position:absolute;bottom:0;background:#fafafa"></div>':'')
-        +'<div style="width:100%;height:'+barH+'px;background:#F2740B;border-radius:4px 4px 0 0;position:relative;z-index:1"></div>'
+        +'<div style="width:100%;height:'+Math.max(barH,18)+'px;background:#F2740B;border-radius:4px 4px 0 0;position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:center;padding-top:3px"><span style="font-size:9px;color:#fff;font-weight:700">'+d.conversations+'</span></div>'
         +'</div>'
         +(diff!==null?'<div style="background:'+diffBg+';border-radius:4px;padding:2px 5px;margin-top:4px"><div style="font-size:8.5px;color:'+diffColor+';font-weight:700">'+(diff>=0?"+":"")+diff+'</div></div>':'')
         +'<div style="font-size:10px;color:#999;margin-top:'+(diff!==null?'3':'8')+'px">'+d.label+'</div>'

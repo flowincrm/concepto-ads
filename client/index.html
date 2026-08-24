@@ -77,6 +77,101 @@ async function apiFetch(path,opts={}){
 /* Semana ISO actual */
 const currentWeek=(()=>{const d=new Date();const jan1=new Date(d.getFullYear(),0,1);const wk=Math.ceil(((d-jan1)/864e5+jan1.getDay()+1)/7);return`${d.getFullYear()}-W${String(wk).padStart(2,"0")}`})();
 
+function exportPDF(account,data,alerts,range,monthlyData,goals,w){
+    var cur=data.currency||account.cur;
+    var acc=data.account||{};
+    var phrase=range.key==="d7"?"\u00daltimos 7 d\u00edas":range.key==="d30"?"\u00daltimos 30 d\u00edas":range.from+" al "+range.to;
+    var today=new Date().toLocaleDateString("es-AR",{day:"numeric",month:"short",year:"numeric"});
+    var camps=(data.campaigns||[]).filter(function(c){return toNum(c.spend)>0});
+    var maxConv=Math.max.apply(null,(monthlyData||[]).map(function(d){return d.conversations||0}).concat([1]));
+    var allGoalVals=Object.values(goals||{}).filter(function(v){return v}).map(Number);
+    var maxH=Math.max(maxConv,Math.max.apply(null,allGoalVals.concat([1])));
+
+    var chartBars=(monthlyData||[]).map(function(d){
+      var mIdx=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].indexOf(d.label);
+      var mk=d.year+"-"+String(mIdx+1).padStart(2,"0");
+      var g=(goals||{})[mk];
+      var barH=Math.round((d.conversations/maxH)*160);
+      var goalH=g?Math.round((g/maxH)*160):0;
+      var diff=g?d.conversations-g:null;
+      var diffColor=diff!==null?(diff>=0?"#2D7A4F":"#D85A30"):"";
+      var diffBg=diff!==null?(diff>=0?"#E8F5E9":"#FEE9E1"):"";
+      return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end">'
+        +'<div style="font-size:9px;color:#D85A30;font-weight:700;margin-bottom:3px">'+d.conversations+'</div>'
+        +'<div style="position:relative;width:100%">'
+        +(g?'<div style="width:100%;height:'+goalH+'px;border:1.5px solid #ddd;border-radius:4px 4px 0 0;position:absolute;bottom:0;background:#fafafa"></div>':'')
+        +'<div style="width:100%;height:'+barH+'px;background:#F2740B;border-radius:4px 4px 0 0;position:relative;z-index:1"></div>'
+        +'</div>'
+        +(diff!==null?'<div style="background:'+diffBg+';border-radius:4px;padding:2px 5px;margin-top:4px"><div style="font-size:8.5px;color:'+diffColor+';font-weight:700">'+(diff>=0?"+":"")+diff+'</div></div>':'')
+        +'<div style="font-size:10px;color:#999;margin-top:'+(diff!==null?'3':'8')+'px">'+d.label+'</div>'
+        +'</div>';
+    }).join("");
+
+    var campRows=camps.map(function(c){
+      var ctrColor=toNum(c.ctr)>=1?"#2D7A4F":"#1a1a1a";
+      return '<tr style="border-bottom:0.5px solid #F0F0F0">'
+        +'<td style="padding:8px;font-weight:500">'+c.name+'</td>'
+        +'<td style="padding:8px;text-align:right;color:#D85A30;font-weight:600">'+heroMoney(c.spend,cur)+'</td>'
+        +'<td style="padding:8px;text-align:right">'+heroNum(c.conversations)+'</td>'
+        +'<td style="padding:8px;text-align:right">'+heroCost(c.cost_per_msg,cur)+'</td>'
+        +'<td style="padding:8px;text-align:right;color:'+ctrColor+'">'+pct(c.ctr)+'</td>'
+        +'</tr>';
+    }).join("");
+
+    var alertRows=(alerts||[]).map(function(a){
+      var icon=a.sev==="green"?"\u2714":"\u26a0";
+      var color=a.sev==="green"?"#2D7A4F":a.sev==="red"?"#D85A30":"#BA7517";
+      return '<div style="display:flex;gap:6px;margin-bottom:4px"><span style="color:'+color+'">'+icon+'</span> '+a.text+'</div>';
+    }).join("");
+
+    var trendCPM=data.prev_cost_per_msg?Math.round((toNum(acc.cost_per_msg)-data.prev_cost_per_msg)/data.prev_cost_per_msg*100):null;
+    var trendTxt=trendCPM!==null?'<div style="font-size:10px;color:'+(trendCPM>0?"#D85A30":"#2D7A4F")+';margin-top:2px">'+(trendCPM>0?"+":"")+trendCPM+'% vs. anterior</div>':"";
+
+    var doc='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reporte '+account.name+'</title>'
+      +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#1a1a1a;padding:32px 28px}@media print{body{padding:20px}}</style></head><body>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #F2740B">'
+      +'<div><div style="font-size:11px;color:#F2740B;font-weight:700;letter-spacing:1px;text-transform:uppercase">Reporte de performance</div>'
+      +'<div style="font-size:22px;font-weight:700;margin-top:4px">'+account.name+'</div>'
+      +'<div style="font-size:12px;color:#888;margin-top:2px">'+phrase+' \u00b7 '+today+'</div></div>'
+      +'<img src="'+CONFIG.serverUrl.replace(/\/$/,"")+'/logo.png" style="width:44px;height:44px;border-radius:10px" crossorigin></div>'
+
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">'
+      +'<div style="background:#FFF7F0;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#B86A20;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Gasto total</div><div style="font-size:20px;font-weight:700;color:#D85A30;margin-top:4px">'+heroMoney(acc.spend,cur)+'</div></div>'
+      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Conversaciones</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroNum(acc.conversations)+'</div></div>'
+      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Costo por mensaje</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroCost(acc.cost_per_msg,cur)+'</div>'+trendTxt+'</div>'
+      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Alcance</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroNum(acc.reach)+'</div></div>'
+      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Impresiones</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroNum(acc.impressions)+'</div></div>'
+      +'<div style="background:#F0FAF4;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#2D7A4F;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">CTR</div><div style="font-size:20px;font-weight:700;color:#2D7A4F;margin-top:4px">'+pct(acc.ctr)+'</div></div>'
+      +'</div>'
+
+      +'<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:#F2740B;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px">Campa\u00f1as</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1.5px solid #E5E5E5">'
+      +'<th style="text-align:left;padding:6px 8px;font-size:10px;color:#999;font-weight:600;text-transform:uppercase">Campa\u00f1a</th>'
+      +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">Gasto</th>'
+      +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">Conv.</th>'
+      +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">C/msj</th>'
+      +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">CTR</th>'
+      +'</tr></thead><tbody>'+campRows+'</tbody></table></div>'
+
+      +(alertRows?'<div style="margin-bottom:20px;background:#FFFBF5;padding:14px 16px;border-left:3px solid #F2740B">'
+      +'<div style="font-size:10px;font-weight:700;color:#F2740B;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Alertas</div>'
+      +'<div style="font-size:12px;line-height:1.6">'+alertRows+'</div></div>':'')
+
+      +(monthlyData&&monthlyData.length?'<div style="background:#F8F8F8;border-radius:8px;padding:14px 16px;margin-bottom:20px">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:#F2740B;text-transform:uppercase;letter-spacing:0.8px">Rendimiento mensual</div>'
+      +'<div style="margin-left:auto;display:flex;gap:14px;font-size:10px;color:#999">'
+      +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#F2740B;border-radius:2px;display:inline-block"></span> Real</span>'
+      +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border:1.5px solid #ccc;border-radius:2px;display:inline-block;background:transparent"></span> Objetivo</span>'
+      +'</div></div>'
+      +'<div style="display:flex;align-items:flex-end;gap:6px;padding:0 4px;height:200px">'+chartBars+'</div></div>':'')
+
+      +'<div style="border-top:0.5px solid #E5E5E5;padding-top:12px;display:flex;justify-content:space-between;font-size:10px;color:#bbb">'
+      +'<div>Generado por Concepto Agencia</div><div>'+today+'</div></div>'
+      +'</body></html>';
+
+    w.document.open();w.document.write(doc);w.document.close();setTimeout(function(){w.print()},500);
+  }
+
 /* ================================================================ */
 /* LOGIN                                                             */
 /* ================================================================ */
@@ -576,100 +671,7 @@ function Home({onOpen}){
     var changeTxt=isMoney?(pctD>0?diffTxt+" m\u00e1s caro":diffTxt+" m\u00e1s barato"):(pctD>0?diffTxt+" m\u00e1s":diffTxt+" menos");
     return h("span",{className:"tip"},content,h("div",{className:"tipbox"},h("div",{style:{fontSize:10,color:"#7C7360",marginBottom:4}},"7 d\u00edas anteriores"),h("div",{style:{fontSize:14,fontWeight:700,color:"#F6F1E7"}},isMoney?heroCost(prevVal,cur):heroNum(prevVal)),h("div",{style:{fontSize:10,color:color,marginTop:2}},arrow+" "+Math.abs(pctD)+"% ("+changeTxt+")")));
   };
-  const exportPDF=function(account,data,alerts,range,monthlyData,goals,w){
-    var cur=data.currency||account.cur;
-    var acc=data.account||{};
-    var phrase=range.key==="d7"?"\u00daltimos 7 d\u00edas":range.key==="d30"?"\u00daltimos 30 d\u00edas":range.from+" al "+range.to;
-    var today=new Date().toLocaleDateString("es-AR",{day:"numeric",month:"short",year:"numeric"});
-    var camps=(data.campaigns||[]).filter(function(c){return toNum(c.spend)>0});
-    var maxConv=Math.max.apply(null,(monthlyData||[]).map(function(d){return d.conversations||0}).concat([1]));
-    var allGoalVals=Object.values(goals||{}).filter(function(v){return v}).map(Number);
-    var maxH=Math.max(maxConv,Math.max.apply(null,allGoalVals.concat([1])));
-
-    var chartBars=(monthlyData||[]).map(function(d){
-      var mIdx=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].indexOf(d.label);
-      var mk=d.year+"-"+String(mIdx+1).padStart(2,"0");
-      var g=(goals||{})[mk];
-      var barH=Math.round((d.conversations/maxH)*160);
-      var goalH=g?Math.round((g/maxH)*160):0;
-      var diff=g?d.conversations-g:null;
-      var diffColor=diff!==null?(diff>=0?"#2D7A4F":"#D85A30"):"";
-      var diffBg=diff!==null?(diff>=0?"#E8F5E9":"#FEE9E1"):"";
-      return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end">'
-        +'<div style="font-size:9px;color:#D85A30;font-weight:700;margin-bottom:3px">'+d.conversations+'</div>'
-        +'<div style="position:relative;width:100%">'
-        +(g?'<div style="width:100%;height:'+goalH+'px;border:1.5px solid #ddd;border-radius:4px 4px 0 0;position:absolute;bottom:0;background:#fafafa"></div>':'')
-        +'<div style="width:100%;height:'+barH+'px;background:#F2740B;border-radius:4px 4px 0 0;position:relative;z-index:1"></div>'
-        +'</div>'
-        +(diff!==null?'<div style="background:'+diffBg+';border-radius:4px;padding:2px 5px;margin-top:4px"><div style="font-size:8.5px;color:'+diffColor+';font-weight:700">'+(diff>=0?"+":"")+diff+'</div></div>':'')
-        +'<div style="font-size:10px;color:#999;margin-top:'+(diff!==null?'3':'8')+'px">'+d.label+'</div>'
-        +'</div>';
-    }).join("");
-
-    var campRows=camps.map(function(c){
-      var ctrColor=toNum(c.ctr)>=1?"#2D7A4F":"#1a1a1a";
-      return '<tr style="border-bottom:0.5px solid #F0F0F0">'
-        +'<td style="padding:8px;font-weight:500">'+c.name+'</td>'
-        +'<td style="padding:8px;text-align:right;color:#D85A30;font-weight:600">'+heroMoney(c.spend,cur)+'</td>'
-        +'<td style="padding:8px;text-align:right">'+heroNum(c.conversations)+'</td>'
-        +'<td style="padding:8px;text-align:right">'+heroCost(c.cost_per_msg,cur)+'</td>'
-        +'<td style="padding:8px;text-align:right;color:'+ctrColor+'">'+pct(c.ctr)+'</td>'
-        +'</tr>';
-    }).join("");
-
-    var alertRows=(alerts||[]).map(function(a){
-      var icon=a.sev==="green"?"\u2714":"\u26a0";
-      var color=a.sev==="green"?"#2D7A4F":a.sev==="red"?"#D85A30":"#BA7517";
-      return '<div style="display:flex;gap:6px;margin-bottom:4px"><span style="color:'+color+'">'+icon+'</span> '+a.text+'</div>';
-    }).join("");
-
-    var trendCPM=data.prev_cost_per_msg?Math.round((toNum(acc.cost_per_msg)-data.prev_cost_per_msg)/data.prev_cost_per_msg*100):null;
-    var trendTxt=trendCPM!==null?'<div style="font-size:10px;color:'+(trendCPM>0?"#D85A30":"#2D7A4F")+';margin-top:2px">'+(trendCPM>0?"+":"")+trendCPM+'% vs. anterior</div>':"";
-
-    var doc='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reporte '+account.name+'</title>'
-      +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#1a1a1a;padding:32px 28px}@media print{body{padding:20px}}</style></head><body>'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #F2740B">'
-      +'<div><div style="font-size:11px;color:#F2740B;font-weight:700;letter-spacing:1px;text-transform:uppercase">Reporte de performance</div>'
-      +'<div style="font-size:22px;font-weight:700;margin-top:4px">'+account.name+'</div>'
-      +'<div style="font-size:12px;color:#888;margin-top:2px">'+phrase+' \u00b7 '+today+'</div></div>'
-      +'<img src="'+CONFIG.serverUrl.replace(/\/$/,"")+'/logo.png" style="width:44px;height:44px;border-radius:10px" crossorigin></div>'
-
-      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">'
-      +'<div style="background:#FFF7F0;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#B86A20;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Gasto total</div><div style="font-size:20px;font-weight:700;color:#D85A30;margin-top:4px">'+heroMoney(acc.spend,cur)+'</div></div>'
-      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Conversaciones</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroNum(acc.conversations)+'</div></div>'
-      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Costo por mensaje</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroCost(acc.cost_per_msg,cur)+'</div>'+trendTxt+'</div>'
-      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Alcance</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroNum(acc.reach)+'</div></div>'
-      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Impresiones</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroNum(acc.impressions)+'</div></div>'
-      +'<div style="background:#F0FAF4;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#2D7A4F;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">CTR</div><div style="font-size:20px;font-weight:700;color:#2D7A4F;margin-top:4px">'+pct(acc.ctr)+'</div></div>'
-      +'</div>'
-
-      +'<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:#F2740B;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px">Campa\u00f1as</div>'
-      +'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1.5px solid #E5E5E5">'
-      +'<th style="text-align:left;padding:6px 8px;font-size:10px;color:#999;font-weight:600;text-transform:uppercase">Campa\u00f1a</th>'
-      +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">Gasto</th>'
-      +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">Conv.</th>'
-      +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">C/msj</th>'
-      +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">CTR</th>'
-      +'</tr></thead><tbody>'+campRows+'</tbody></table></div>'
-
-      +(alertRows?'<div style="margin-bottom:20px;background:#FFFBF5;padding:14px 16px;border-left:3px solid #F2740B">'
-      +'<div style="font-size:10px;font-weight:700;color:#F2740B;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Alertas</div>'
-      +'<div style="font-size:12px;line-height:1.6">'+alertRows+'</div></div>':'')
-
-      +(monthlyData&&monthlyData.length?'<div style="background:#F8F8F8;border-radius:8px;padding:14px 16px;margin-bottom:20px">'
-      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:#F2740B;text-transform:uppercase;letter-spacing:0.8px">Rendimiento mensual</div>'
-      +'<div style="margin-left:auto;display:flex;gap:14px;font-size:10px;color:#999">'
-      +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#F2740B;border-radius:2px;display:inline-block"></span> Real</span>'
-      +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border:1.5px solid #ccc;border-radius:2px;display:inline-block;background:transparent"></span> Objetivo</span>'
-      +'</div></div>'
-      +'<div style="display:flex;align-items:flex-end;gap:6px;padding:0 4px;height:200px">'+chartBars+'</div></div>':'')
-
-      +'<div style="border-top:0.5px solid #E5E5E5;padding-top:12px;display:flex;justify-content:space-between;font-size:10px;color:#bbb">'
-      +'<div>Generado por Concepto Agencia</div><div>'+today+'</div></div>'
-      +'</body></html>';
-
-    w.document.open();w.document.write(doc);w.document.close();setTimeout(function(){w.print()},500);
-  };
+;
     const statusInfo=function(m){
     if(!m||m.error)return{color:D.faint,bg:D.lineSoft,label:"..."};
     if(toNum(m.account&&m.account.spend)>0)return{color:D.green,bg:D.greenSoft,label:"Activa"};

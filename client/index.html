@@ -91,8 +91,8 @@ function exportPDF(account,data,alerts,range,monthlyData,goals,w){
       var mIdx=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].indexOf(d.label);
       var mk=d.year+"-"+String(mIdx+1).padStart(2,"0");
       var g=(goals||{})[mk];
-      var barH=Math.round((d.conversations/maxH)*160);
-      var goalH=g?Math.round((g/maxH)*160):0;
+      var barH=Math.round((d.conversations/maxH)*100);
+      var goalH=g?Math.round((g/maxH)*100):0;
       var diff=g?d.conversations-g:null;
       var diffColor=diff!==null?(diff>=0?"#2D7A4F":"#D85A30"):"";
       var diffBg=diff!==null?(diff>=0?"#E8F5E9":"#FEE9E1"):"";
@@ -128,23 +128,23 @@ function exportPDF(account,data,alerts,range,monthlyData,goals,w){
     var trendTxt=trendCPM!==null?'<div style="font-size:10px;color:'+(trendCPM>0?"#D85A30":"#2D7A4F")+';margin-top:2px">'+(trendCPM>0?"+":"")+trendCPM+'% vs. anterior</div>':"";
 
     var doc='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reporte '+account.name+'</title>'
-      +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#1a1a1a;padding:24px 22px}@media print{body{padding:16px}@page{margin:8mm;size:A4}}</style></head><body>'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #F2740B">'
+      +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#1a1a1a;padding:16px 18px;font-size:11px}@media print{body{padding:12px}@page{margin:6mm;size:A4}}.no-break{page-break-inside:avoid}</style></head><body>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #F2740B">'
       +'<div><div style="font-size:11px;color:#F2740B;font-weight:700;letter-spacing:1px;text-transform:uppercase">Reporte de performance</div>'
-      +'<div style="font-size:22px;font-weight:700;margin-top:4px">'+account.name+'</div>'
+      +'<div style="font-size:18px;font-weight:700;margin-top:2px">'+account.name+'</div>'
       +'<div style="font-size:12px;color:#888;margin-top:2px">'+phrase+' \u00b7 '+today+'</div></div>'
       +'<img src="'+CONFIG.serverUrl.replace(/\/$/,"")+'/logo.png" style="width:44px;height:44px;border-radius:10px" crossorigin></div>'
 
-      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px">'
-      +'<div style="background:#FFF7F0;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#B86A20;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Gasto total</div><div style="font-size:20px;font-weight:700;color:#D85A30;margin-top:4px">'+heroMoney(acc.spend,cur)+'</div></div>'
-      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Conversaciones</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroNum(acc.conversations)+'</div></div>'
-      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Costo por mensaje</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroCost(acc.cost_per_msg,cur)+'</div>'+trendTxt+'</div>'
-      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Alcance</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroNum(acc.reach)+'</div></div>'
-      +'<div style="background:#F5F5F5;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Impresiones</div><div style="font-size:20px;font-weight:700;margin-top:4px">'+heroNum(acc.impressions)+'</div></div>'
-      +'<div style="background:#F0FAF4;border-radius:8px;padding:12px 14px"><div style="font-size:10px;color:#2D7A4F;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">CTR</div><div style="font-size:20px;font-weight:700;color:#2D7A4F;margin-top:4px">'+pct(acc.ctr)+'</div></div>'
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">'
+      +'<div style="background:#FFF7F0;border-radius:6px;padding:8px 10px"><div style="font-size:10px;color:#B86A20;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Gasto total</div><div style="font-size:17px;font-weight:700;color:#D85A30;margin-top:3px">'+heroMoney(acc.spend,cur)+'</div></div>'
+      +'<div style="background:#F5F5F5;border-radius:6px;padding:8px 10px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Conversaciones</div><div style="font-size:17px;font-weight:700;margin-top:3px">'+heroNum(acc.conversations)+'</div></div>'
+      +'<div style="background:#F5F5F5;border-radius:6px;padding:8px 10px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Costo por mensaje</div><div style="font-size:17px;font-weight:700;margin-top:3px">'+heroCost(acc.cost_per_msg,cur)+'</div>'+trendTxt+'</div>'
+      +'<div style="background:#F5F5F5;border-radius:6px;padding:8px 10px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Alcance</div><div style="font-size:17px;font-weight:700;margin-top:3px">'+heroNum(acc.reach)+'</div></div>'
+      +'<div style="background:#F5F5F5;border-radius:6px;padding:8px 10px"><div style="font-size:10px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Impresiones</div><div style="font-size:17px;font-weight:700;margin-top:3px">'+heroNum(acc.impressions)+'</div></div>'
+      +'<div style="background:#F0FAF4;border-radius:6px;padding:8px 10px"><div style="font-size:10px;color:#2D7A4F;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">CTR</div><div style="font-size:17px;font-weight:700;color:#2D7A4F;margin-top:3px">'+pct(acc.ctr)+'</div></div>'
       +'</div>'
 
-      +'<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:#F2740B;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px">Campa\u00f1as</div>'
+      +'<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;color:#F2740B;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Campa\u00f1as</div>'
       +'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1.5px solid #E5E5E5">'
       +'<th style="text-align:left;padding:6px 8px;font-size:10px;color:#999;font-weight:600;text-transform:uppercase">Campa\u00f1a</th>'
       +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">Gasto</th>'
@@ -153,7 +153,7 @@ function exportPDF(account,data,alerts,range,monthlyData,goals,w){
       +'<th style="text-align:right;padding:6px 8px;font-size:10px;color:#999;font-weight:600">CTR</th>'
       +'</tr></thead><tbody>'+campRows+'</tbody></table></div>'
 
-      +(alertRows?'<div style="margin-bottom:20px;background:#FFFBF5;padding:14px 16px;border-left:3px solid #F2740B">'
+      +(alertRows?'<div style="margin-bottom:12px;background:#FFFBF5;padding:10px 12px;border-left:3px solid #F2740B">'
       +'<div style="font-size:10px;font-weight:700;color:#F2740B;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">Alertas</div>'
       +'<div style="font-size:12px;line-height:1.6">'+alertRows+'</div></div>':'')
 
@@ -163,9 +163,9 @@ function exportPDF(account,data,alerts,range,monthlyData,goals,w){
       +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#F2740B;border-radius:2px;display:inline-block"></span> Real</span>'
       +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border:1.5px solid #ccc;border-radius:2px;display:inline-block;background:transparent"></span> Objetivo</span>'
       +'</div></div>'
-      +'<div style="display:flex;align-items:flex-end;gap:6px;padding:0 4px;height:240px">'+chartBars+'</div></div>':'')
+      +'<div style="display:flex;align-items:flex-end;gap:4px;padding:0 2px;height:150px">'+chartBars+'</div></div>':'')
 
-      +'<div style="border-top:0.5px solid #E5E5E5;padding-top:12px;display:flex;justify-content:space-between;font-size:10px;color:#bbb">'
+      +'<div style="border-top:0.5px solid #E5E5E5;padding-top:8px;display:flex;justify-content:space-between;font-size:9px;color:#bbb">'
       +'<div>Generado por Concepto Agencia</div><div>'+today+'</div></div>'
       +'</body></html>';
 

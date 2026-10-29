@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
 import Redis from "ioredis";
+import crypto from "crypto";
 import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -682,15 +683,35 @@ async function checkAccountAlerts() {
         }
       }
 
-      // Presupuesto casi agotado (para ambos tipos)
+      // Presupuesto: consumo + pacing
       const s = settings[acc.account_id];
       if (s && s.budget && acc.account_status === 1) {
         try {
           const ir = await fetch(`${FB}/act_${acc.account_id}/insights?fields=spend&date_preset=this_month&level=account&access_token=${META_TOKEN}`, { signal: AbortSignal.timeout(15000) });
           const id = await ir.json();
           const ms = parseFloat(id.data?.[0]?.spend || 0);
-          const pct = s.budget > 0 ? Math.round(ms / s.budget * 100) : 0;
-          if (pct >= 90) alerts.push("\ud83d\udcb0 *" + name + "*: " + pct + "% del presupuesto mensual ejecutado");
+          const pctSpent = s.budget > 0 ? Math.round(ms / s.budget * 100) : 0;
+          const cur = s.currency || acc.currency || "ARS";
+
+          // Presupuesto casi agotado
+          if (pctSpent >= 90) alerts.push("\ud83d\udcb0 *" + name + "*: " + pctSpent + "% del presupuesto mensual ejecutado");
+
+          // Pacing de presupuesto
+          const pNow = new Date();
+          const dayOfMonth = pNow.getDate();
+          const daysInMonth = new Date(pNow.getFullYear(), pNow.getMonth() + 1, 0).getDate();
+          const expectedPct = Math.round((dayOfMonth / daysInMonth) * 100);
+
+          // Sobreejecutando: gasta demasiado r\u00e1pido
+          if (pctSpent > expectedPct + 20 && pctSpent < 90) {
+            const daysLeft = daysInMonth - dayOfMonth;
+            const budgetLeft = Math.round(s.budget - ms);
+            alerts.push("\ud83d\udd3a *" + name + "*: sobreejecutando \u2014 " + pctSpent + "% gastado al d\u00eda " + dayOfMonth + "/" + daysInMonth + " (esperado ~" + expectedPct + "%). Quedan " + cur + " " + budgetLeft.toLocaleString("es-AR") + " para " + daysLeft + " d\u00edas");
+          }
+          // Subejecutando: gasta muy lento (solo alertar despu\u00e9s del d\u00eda 10)
+          else if (pctSpent < expectedPct - 20 && dayOfMonth >= 10) {
+            alerts.push("\ud83d\udd3b *" + name + "*: subejecutando \u2014 solo " + pctSpent + "% gastado al d\u00eda " + dayOfMonth + "/" + daysInMonth + " (esperado ~" + expectedPct + "%). Riesgo de sub-inversi\u00f3n");
+          }
         } catch {}
       }
     }
@@ -701,6 +722,321 @@ async function checkAccountAlerts() {
       console.log("\ud83d\udce2 Sin alertas");
     }
   } catch (e) { console.error("Slack error:", e.message); }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Fatiga creativa: CTR cae >30% vs promedio 4 semanas                */
+/* ------------------------------------------------------------------ */
+async function checkCreativeFatigue() {
+  if (!SLACK_WEBHOOK) return;
+  try {
+    const pinnedIds = await cache.get("global:pinned") || [];
+    if (!pinnedIds.length) return;
+
+    const alerts = [];
+    const now = new Date();
+    const DAY = 86400000;
+
+    // Semana actual (últimos 7 días) vs 4 semanas anteriores
+    const currentFrom = new Date(now - 7 * DAY).toISOString().slice(0, 10);
+    const currentTo = now.toISOString().slice(0, 10);
+    const prevFrom = new Date(now - 35 * DAY).toISOString().slice(0, 10);
+    const prevTo = new Date(now - 7 * DAY).toISOString().slice(0, 10);
+
+    for (const accId of pinnedIds) {
+      try {
+        const [currentIns, prevIns] = await Promise.all([
+          fbGet(`act_${accId}/insights`, {
+            fields: "campaign_id,campaign_name,ctr,impressions",
+            level: "campaign",
+            time_range: JSON.stringify({ since: currentFrom, until: currentTo }),
+            limit: "25",
+          }),
+          fbGet(`act_${accId}/insights`, {
+            fields: "campaign_id,campaign_name,ctr,impressions",
+            level: "campaign",
+            time_range: JSON.stringify({ since: prevFrom, until: prevTo }),
+            limit: "25",
+          }),
+        ]);
+
+        const prevMap = {};
+        for (const c of (prevIns.data || [])) {
+          if (c.campaign_id) prevMap[c.campaign_id] = parseFloat(c.ctr || 0);
+        }
+
+        for (const c of (currentIns.data || [])) {
+          if (!c.campaign_id) continue;
+          const currentCTR = parseFloat(c.ctr || 0);
+          const avgCTR = prevMap[c.campaign_id];
+          if (!avgCTR || avgCTR === 0) continue;
+          // Solo campañas con impresiones significativas
+          if (parseInt(c.impressions || 0) < 100) continue;
+
+          const drop = (avgCTR - currentCTR) / avgCTR;
+          if (drop > 0.3) {
+            alerts.push("⚠️ *" + (c.campaign_name || c.campaign_id) + "*: CTR cayó de " + avgCTR.toFixed(2) + "% a " + currentCTR.toFixed(2) + "% — posible fatiga creativa");
+          }
+        }
+
+        await sleep(300); // Rate limiting entre cuentas
+      } catch (e) {
+        console.warn("⚠️ Fatigue check " + accId + ":", e.message);
+      }
+    }
+
+    if (alerts.length > 0) {
+      await fetch(SLACK_WEBHOOK, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "🎨 *Meta Ads — Fatiga Creativa*\n" + alerts.join("\n") }),
+      });
+      console.log("🎨 Fatigue: " + alerts.length + " alertas");
+    } else {
+      console.log("🎨 Sin fatiga creativa detectada");
+    }
+  } catch (e) {
+    console.error("Fatigue error:", e.message);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Link de reporte público para clientes                              */
+/* ------------------------------------------------------------------ */
+
+// Generar/obtener token de reporte
+app.post("/api/report-token/:id", auth, async (req, res) => {
+  const { id } = req.params;
+  const tokens = await cache.get("global:report-tokens") || {};
+
+  if (tokens[id]) {
+    return res.json({ token: tokens[id], url: `${req.protocol}://${req.get("host")}/r/${tokens[id]}` });
+  }
+
+  const token = crypto.randomBytes(16).toString("hex");
+  tokens[id] = token;
+
+  const reverseTokens = await cache.get("global:token-accounts") || {};
+  reverseTokens[token] = id;
+
+  await cache.set("global:report-tokens", tokens, 86400 * 365);
+  await cache.set("global:token-accounts", reverseTokens, 86400 * 365);
+
+  res.json({ token, url: `${req.protocol}://${req.get("host")}/r/${token}` });
+});
+
+// Obtener token existente (GET)
+app.get("/api/report-token/:id", auth, async (req, res) => {
+  const { id } = req.params;
+  const tokens = await cache.get("global:report-tokens") || {};
+  if (tokens[id]) {
+    return res.json({ token: tokens[id], url: `${req.protocol}://${req.get("host")}/r/${tokens[id]}` });
+  }
+  res.json({ token: null });
+});
+
+// Revocar token
+app.delete("/api/report-token/:id", auth, async (req, res) => {
+  const { id } = req.params;
+  const tokens = await cache.get("global:report-tokens") || {};
+  const token = tokens[id];
+  if (token) {
+    delete tokens[id];
+    const reverseTokens = await cache.get("global:token-accounts") || {};
+    delete reverseTokens[token];
+    await cache.set("global:report-tokens", tokens, 86400 * 365);
+    await cache.set("global:token-accounts", reverseTokens, 86400 * 365);
+  }
+  res.json({ ok: true });
+});
+
+// API pública de métricas (sin auth)
+app.get("/api/public/:token", async (req, res) => {
+  const { token } = req.params;
+  const reverseTokens = await cache.get("global:token-accounts") || {};
+  const accountId = reverseTokens[token];
+  if (!accountId) return res.status(404).json({ error: "Reporte no encontrado" });
+
+  const { range = "d7", from, to } = req.query;
+  try {
+    const data = await fetchAccountMetrics(accountId, range, from, to);
+    // Datos públicos: sin info interna
+    const publicCampaigns = (data.campaigns || []).map(c => ({
+      name: c.name, spend: c.spend, conversations: c.conversations,
+      cost_per_msg: c.cost_per_msg, reach: c.reach, impressions: c.impressions,
+      ctr: c.ctr, status: c.status, objective: c.objective,
+    }));
+
+    // Monthly data para el gráfico
+    let monthly = [];
+    try {
+      const ck = `monthly:${accountId}`;
+      const cached = await cache.get(ck);
+      if (cached) { monthly = cached; }
+      else {
+        const now = new Date();
+        const months = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          months.push({ label: d.toLocaleDateString("es-AR", { month: "short" }).replace(".", ""), year: d.getFullYear(), since: d.toISOString().slice(0, 10), until: new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10) });
+        }
+        monthly = await Promise.all(months.map(async m => {
+          try {
+            const md = await fbGet(`act_${accountId}/insights`, { fields: "spend,actions,cost_per_action_type,impressions,reach", time_range: JSON.stringify({ since: m.since, until: m.until }), level: "account" });
+            const ins = md.data?.[0] || {};
+            const sp = parseFloat(ins.spend || 0);
+            const cv = extractConv(ins.actions);
+            return { label: m.label, year: m.year, spend: sp, conversations: cv, cost_per_msg: extractCPM(ins.cost_per_action_type, cv, sp), reach: parseInt(ins.reach || 0), impressions: parseInt(ins.impressions || 0) };
+          } catch { return { label: m.label, year: m.year, spend: 0, conversations: 0, cost_per_msg: null, reach: 0, impressions: 0 }; }
+        }));
+        await cache.set(ck, monthly, 3600);
+      }
+    } catch {}
+
+    // Account name
+    let accountName = "Cuenta";
+    try { const ai = await fbGet(`act_${accountId}`, { fields: "name" }); accountName = ai.name || accountName; } catch {}
+
+    res.json({
+      currency: data.currency,
+      accountName,
+      account: data.account,
+      campaigns: publicCampaigns,
+      monthly,
+    });
+  } catch (e) {
+    res.status(503).json({ error: "No se pudieron obtener las métricas" });
+  }
+});
+
+// Página de reporte para clientes
+app.get("/r/:token", async (req, res) => {
+  const { token } = req.params;
+  const reverseTokens = await cache.get("global:token-accounts") || {};
+  const accountId = reverseTokens[token];
+  if (!accountId) return res.status(404).send("<h1>Reporte no encontrado</h1><p>Este link no es válido o fue revocado.</p>");
+
+  let accountName = "Cuenta";
+  try { const ai = await fbGet(`act_${accountId}`, { fields: "name" }); accountName = ai.name || accountName; } catch {}
+
+  res.send(clientReportHTML(token, accountId, accountName, req.protocol + "://" + req.get("host")));
+});
+
+function clientReportHTML(token, accountId, accountName, baseUrl) {
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>${accountName} · Reporte de Performance</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0E0C07;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#F6F1E7;min-height:100vh;padding:16px}
+.container{max-width:900px;margin:0 auto}
+.header{display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #F2740B}
+.header h1{font-size:20px;font-weight:800}
+.header .sub{font-size:12px;color:#7C7360}
+.badge{font-size:11px;font-weight:700;color:#3FBE79;background:#16321F;padding:4px 10px;border-radius:20px;margin-left:auto}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+.stat{background:#261E14;border:1px solid #3A2F1E;border-radius:14px;padding:14px}
+.stat .label{font-size:10px;color:#7C7360;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.stat .value{font-size:22px;font-weight:800;margin-top:6px;line-height:1.1}
+.stat .tint{color:#F2740B}
+.campaigns{background:#1F1810;border:1px solid #3A2F1E;border-radius:14px;padding:16px;margin-bottom:20px}
+.campaigns h2{font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#F2740B;margin-bottom:12px}
+.camp-row{display:grid;grid-template-columns:2fr repeat(5,1fr);gap:8px;padding:10px 0;border-bottom:1px solid #2C2317;font-size:12px;align-items:center}
+.camp-row.head{font-size:9.5px;color:#7C7360;font-weight:700;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #3A2F1E}
+.camp-row .r{text-align:right}
+.camp-row .name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.camp-row .active{color:#3FBE79}.camp-row .paused{color:#7C7360}
+.range-bar{display:inline-flex;gap:3px;background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:3px;margin-bottom:18px}
+.range-bar button{padding:6px 12px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:transparent;color:#7C7360;font-family:inherit}
+.range-bar button.active{background:#F2740B;color:#fff}
+.chart-box{background:#261E14;border:1px solid #3A2F1E;border-radius:14px;padding:16px;margin-bottom:20px}
+.chart-box h2{font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#F2740B;margin-bottom:14px}
+.bars{display:flex;align-items:flex-end;gap:6px;height:160px;padding:0 4px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.bar-fill{width:100%;background:#F2740B;border-radius:4px 4px 0 0;min-height:4px;position:relative}
+.bar-fill .bar-label{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;color:#F6F1E7;white-space:nowrap}
+.bar-month{font-size:10px;color:#7C7360;margin-top:6px}
+.footer{text-align:center;font-size:10px;color:#7C7360;margin-top:20px;padding-top:12px;border-top:1px solid #2C2317}
+.loading{text-align:center;padding:60px 0;color:#7C7360;font-size:14px}
+.spin{animation:sp .9s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <div class="loading"><span class="spin">⟳</span> Cargando métricas…</div>
+</div>
+<script>
+const TOKEN="${token}";
+const BASE="${baseUrl}";
+const ACCOUNT_NAME="${accountName.replace(/"/g, '\\"')}";
+let currentRange="d7";
+
+const compact=n=>{const v=+n||0,a=Math.abs(v);if(a>=1e6)return(v/1e6).toFixed(a>=1e7?0:1).replace(".",",")+"M";if(a>=1e5)return(v/1e3).toFixed(0)+"K";if(a>=1e4)return(v/1e3).toFixed(1).replace(".",",")+"K";return new Intl.NumberFormat("es-AR",{maximumFractionDigits:0}).format(v)};
+const money=(n,c)=>{const v=+n||0;const s=c==="USD"?"US$ ":c==="DKK"?"DKK ":"$ ";if(Math.abs(v)>=1e5)return s+compact(v);return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:0}).format(v)};
+const cost=(n,c)=>{if(n==null)return"—";const v=+n||0;if(Math.abs(v)>=1e3)return money(v,c);return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:2}).format(v)};
+const pct=n=>n==null?"—":(+n||0).toFixed(2)+"%";
+
+async function loadReport(range){
+  currentRange=range;
+  const app=document.getElementById("app");
+  app.innerHTML='<div class="loading"><span class="spin">⟳</span> Cargando métricas…</div>';
+  try{
+    const res=await fetch(BASE+"/api/public/"+TOKEN+"?range="+range);
+    if(!res.ok)throw new Error("Error "+res.status);
+    const d=await res.json();
+    render(d);
+  }catch(e){
+    app.innerHTML='<div class="loading" style="color:#E8613E">Error al cargar métricas. Intentá de nuevo más tarde.</div>';
+  }
+}
+
+function render(d){
+  const a=d.account||{};const c=d.currency||"ARS";
+  const phrase=currentRange==="d7"?"Últimos 7 días":currentRange==="d30"?"Últimos 30 días":"Período personalizado";
+  const today=new Date().toLocaleDateString("es-AR",{day:"numeric",month:"long",year:"numeric"});
+
+  let campRows=(d.campaigns||[]).filter(x=>(+x.spend||0)>0).map(x=>{
+    const active=x.status==="activa";
+    return '<div class="camp-row"><div class="name">'+(x.name||"—")+'</div><div class="r" style="color:#F2740B;font-weight:700">'+money(x.spend,c)+'</div><div class="r">'+compact(x.conversations)+'</div><div class="r">'+cost(x.cost_per_msg,c)+'</div><div class="r">'+(active?'<span class="active">Activa</span>':'<span class="paused">Pausada</span>')+'</div><div class="r" style="color:'+(+x.ctr>=1?"#3FBE79":"inherit")+'">'+pct(x.ctr)+'</div></div>';
+  }).join("");
+
+  // Chart bars
+  const monthly=d.monthly||[];
+  const maxConv=Math.max(...monthly.map(m=>m.conversations||0),1);
+  let chartBars=monthly.map(m=>{
+    const h=Math.max(Math.round((m.conversations/maxConv)*140),4);
+    return '<div class="bar-col"><div class="bar-fill" style="height:'+h+'px"><span class="bar-label">'+m.conversations+'</span></div><div class="bar-month">'+m.label+'</div></div>';
+  }).join("");
+
+  document.getElementById("app").innerHTML=
+    '<div class="header"><div><h1>'+ACCOUNT_NAME+'</h1><div class="sub">'+phrase+' · '+today+'</div></div><div class="badge">● En vivo</div></div>'
+
+    +'<div class="range-bar"><button class="'+(currentRange==="d7"?"active":"")+'" onclick="loadReport(\\\'d7\\\')">7 días</button><button class="'+(currentRange==="d30"?"active":"")+'" onclick="loadReport(\\\'d30\\\')">30 días</button></div>'
+
+    +'<div class="stats">'
+    +'<div class="stat"><div class="label">Gasto total</div><div class="value tint">'+money(a.spend,c)+'</div></div>'
+    +'<div class="stat"><div class="label">Conversaciones</div><div class="value">'+compact(a.conversations)+'</div></div>'
+    +'<div class="stat"><div class="label">Costo por mensaje</div><div class="value">'+cost(a.cost_per_msg,c)+'</div></div>'
+    +'<div class="stat"><div class="label">Alcance</div><div class="value">'+compact(a.reach)+'</div></div>'
+    +'<div class="stat"><div class="label">Impresiones</div><div class="value">'+compact(a.impressions)+'</div></div>'
+    +'<div class="stat"><div class="label">CTR</div><div class="value" style="color:'+(+a.ctr>=1?"#3FBE79":"inherit")+'">'+pct(a.ctr)+'</div></div>'
+    +'</div>'
+
+    +(campRows?'<div class="campaigns"><h2>Campañas</h2><div class="camp-row head"><div>Campaña</div><div class="r">Gasto</div><div class="r">Conv.</div><div class="r">C/msj</div><div class="r">Estado</div><div class="r">CTR</div></div>'+campRows+'</div>':'')
+
+    +(monthly.length?'<div class="chart-box"><h2>Rendimiento mensual</h2><div class="bars">'+chartBars+'</div></div>':'')
+
+    +'<div class="footer">Reporte generado por Concepto Agencia · '+today+'</div>';
+}
+
+loadReport("d7");
+</script>
+</body>
+</html>`;
 }
 
 // Favoritas sincronizadas con el servidor
@@ -715,7 +1051,7 @@ app.post("/api/pinned", auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/check-alerts", auth, async (req, res) => { await checkAccountAlerts(); res.json({ ok: true }); });
+app.get("/api/check-alerts", auth, async (req, res) => { await checkAccountAlerts(); await checkCreativeFatigue(); res.json({ ok: true }); });
 if (SLACK_WEBHOOK) {
   // Alertas a las 08:00, 12:00 y 18:00 hora Argentina (UTC-3)
   const ALERT_HOURS = [8, 12, 18];
@@ -728,6 +1064,7 @@ if (SLACK_WEBHOOK) {
       lastAlertHour = argHour;
       console.log("\ud83d\udce2 Alerta programada " + argHour + ":00 AR");
       checkAccountAlerts();
+      checkCreativeFatigue();
     }
     if (!ALERT_HOURS.includes(argHour)) lastAlertHour = null;
   }, 60000); // chequea cada minuto

@@ -602,6 +602,38 @@ app.get("/api/account/:id/monthly", auth, async (req, res) => {
   }
 });
 
+// Audience breakdowns a nivel cuenta (gender, age, platform)
+app.get("/api/account/:id/audience", auth, async (req, res) => {
+  const accountId = req.params.id;
+  const ck = `aud:${accountId}`;
+  const cached = await cache.get(ck);
+  if (cached) return res.json(cached);
+  try {
+    const today = new Date();
+    const since = new Date(today); since.setDate(since.getDate() - 30);
+    const BASE2 = { time_range: JSON.stringify({ since: since.toISOString().slice(0,10), until: today.toISOString().slice(0,10) }), fields: "spend,impressions,reach,clicks,actions", access_token: META_TOKEN };
+    const [gR, aR, pR] = await Promise.allSettled([
+      fbGet(`act_${accountId}/insights`, { ...BASE2, breakdowns: "gender" }),
+      fbGet(`act_${accountId}/insights`, { ...BASE2, breakdowns: "age" }),
+      fbGet(`act_${accountId}/insights`, { ...BASE2, breakdowns: "publisher_platform" }),
+    ]);
+    const parse = (r) => (r.status === "fulfilled" && r.value?.data) ? r.value.data : [];
+    const gData = parse(gR), aData = parse(aR), pData = parse(pR);
+    const totalSpend = gData.reduce((s,x) => s + parseFloat(x.spend||0), 0) || 1;
+    const gender = gData.map(x => ({ label: x.gender === "male" ? "Hombres" : x.gender === "female" ? "Mujeres" : "Otro", pct: Math.round(parseFloat(x.spend||0)/totalSpend*100) }));
+    const totalSpendP = pData.reduce((s,x) => s + parseFloat(x.spend||0), 0) || 1;
+    const platform = pData.map(x => ({ label: x.publisher_platform, pct: Math.round(parseFloat(x.spend||0)/totalSpendP*100) }));
+    const totalSpendA = aData.reduce((s,x) => s + parseFloat(x.spend||0), 0) || 1;
+    const age = aData.map(x => ({ label: x.age, pct: Math.round(parseFloat(x.spend||0)/totalSpendA*100) }));
+    const result = { gender, platform, age };
+    await cache.set(ck, result, 900);
+    res.json(result);
+  } catch(e) {
+    console.error("❌ audience:", e.message);
+    res.json({ gender: [], platform: [], age: [] });
+  }
+});
+
 // Lista dinámica de cuentas desde Meta (cache 1 hora)
 app.get("/api/accounts", auth, async (req, res) => {
   const ck = "global:accounts";
@@ -962,9 +994,8 @@ function clientReportHTML(token, accountId, accountName) {
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#0E0C07;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#F6F1E7;min-height:100vh}
-.container{max-width:900px;margin:0 auto}
-/* Hero header */
-.hero{background:linear-gradient(135deg,#D4650A 0%,#F2940B 60%,#F5B73B 100%);padding:32px 28px 28px;position:relative;overflow:hidden}
+.container{max-width:600px;margin:0 auto}
+.hero{background:linear-gradient(135deg,#D4650A 0%,#F2940B 60%,#F5B73B 100%);padding:32px 24px 28px;position:relative;overflow:hidden}
 .hero .circle1{position:absolute;right:-30px;top:-30px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,0.12)}
 .hero .circle2{position:absolute;right:40px;bottom:-40px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.07)}
 .hero-content{position:relative;z-index:1}
@@ -974,31 +1005,60 @@ body{background:#0E0C07;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 .hero .date-sub{font-size:12px;color:rgba(255,255,255,0.65);margin-top:8px}
 .hero .badges{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
 .hero .pill{background:rgba(0,0,0,0.2);color:#fff;font-size:10px;font-weight:700;padding:4px 12px;border-radius:20px}
-.body-content{padding:20px 24px 24px}
-.section-title{font-size:12px;font-weight:800;color:#F2740B;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:22px}
-.stat{background:#261E14;border:1px solid #3A2F1E;border-radius:14px;padding:14px}
+.body-content{padding:20px 16px 24px}
+.section-title{font-size:12px;font-weight:800;color:#F2740B;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;margin-top:24px}
+.section-title:first-child{margin-top:0}
+/* Stats 2-col */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
+.stat{background:#261E14;border:1px solid #3A2F1E;border-radius:14px;padding:14px 16px}
+.stat.highlight{border-left:3px solid #F2740B}
 .stat .label{font-size:10px;color:#7C7360;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.stat .label.orange{color:#F2740B}
 .stat .value{font-size:22px;font-weight:800;margin-top:6px;line-height:1.1}
 .stat .tint{color:#F2740B}
-.campaigns{background:#1F1810;border:1px solid #3A2F1E;border-radius:14px;padding:16px;margin-bottom:20px}
-.campaigns h2{font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#F2740B;margin-bottom:12px}
-.camp-row{display:grid;grid-template-columns:2fr repeat(5,1fr);gap:8px;padding:10px 0;border-bottom:1px solid #2C2317;font-size:12px;align-items:center}
-.camp-row.head{font-size:9.5px;color:#7C7360;font-weight:700;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #3A2F1E}
-.camp-row .r{text-align:right}
-.camp-row .name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.camp-row .active{color:#3FBE79}.camp-row .paused{color:#7C7360}
+.stat .trend{font-size:10px;margin-top:3px;display:flex;align-items:center;gap:4px}
+.stat .trend .box{width:10px;height:10px;border-radius:2px;display:inline-block}
+/* Anuncios destacados */
+.ads-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
+.ad-card{background:#261E14;border:1px solid #3A2F1E;border-radius:14px;overflow:hidden}
+.ad-thumb{background:#1A1408;height:100px;display:flex;align-items:center;justify-content:center;color:#7C7360;font-size:12px;flex-direction:column;gap:4px;border-bottom:1px solid #3A2F1E}
+.ad-thumb svg{width:24px;height:24px;stroke:#7C7360;fill:none;stroke-width:1.5}
+.ad-info{padding:10px 12px}
+.ad-info .ad-name{font-size:13px;font-weight:700;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ad-info .ad-metrics{display:flex;justify-content:space-between}
+.ad-info .ad-metric .ad-metric-label{font-size:9px;color:#7C7360;text-transform:uppercase;letter-spacing:.3px;font-weight:600}
+.ad-info .ad-metric .ad-metric-value{font-size:15px;font-weight:800;margin-top:2px}
+/* Audiencia */
+.aud-section{background:#261E14;border:1px solid #3A2F1E;border-radius:14px;padding:16px;margin-bottom:10px}
+.aud-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.aud-box{background:#1F1810;border-radius:10px;padding:14px}
+.aud-box .aud-title{font-size:12px;font-weight:700;margin-bottom:10px}
+.donut-row{display:flex;align-items:center;gap:12px}
+.donut-wrap{width:56px;height:56px;flex-shrink:0}
+.donut-legend{font-size:11px;line-height:1.6}
+.donut-legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+.age-bars{display:flex;gap:6px;margin-top:6px}
+.age-col{flex:1;display:flex;flex-direction:column;align-items:center}
+.age-bar{width:100%;height:40px;border-radius:4px;background:#F2740B;position:relative}
+.age-label{font-size:10px;color:#7C7360;margin-top:6px}
+.age-pct{font-size:11px;font-weight:700;color:#F2740B;margin-top:2px}
+/* Chart */
+.chart-box{background:#261E14;border:1px solid #3A2F1E;border-radius:14px;padding:16px;margin-bottom:10px}
+.chart-box h2{font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#F2740B;margin-bottom:14px}
+.bars{display:flex;align-items:flex-end;gap:8px;height:160px;padding:0 4px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.bar-fill{width:100%;background:#F2740B;border-radius:4px 4px 0 0;min-height:4px;position:relative}
+.bar-fill .bar-val{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:700;color:#fff;white-space:nowrap}
+.bar-month{font-size:10px;color:#7C7360;margin-top:6px}
+.bar-diff{margin-top:3px;font-size:9px;font-weight:700;background:#261E14;border:1px solid #3A2F1E;border-radius:4px;padding:1px 5px}
+.chart-legend{display:flex;gap:14px;font-size:10px;color:#7C7360;margin-top:10px}
+.chart-legend .leg-dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle}
+/* Range */
 .range-bar{display:inline-flex;gap:3px;background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:3px;margin-bottom:18px}
 .range-bar button{padding:6px 12px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:transparent;color:#7C7360;font-family:inherit}
 .range-bar button.active{background:#F2740B;color:#fff}
-.chart-box{background:#261E14;border:1px solid #3A2F1E;border-radius:14px;padding:16px;margin-bottom:20px}
-.chart-box h2{font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#F2740B;margin-bottom:14px}
-.bars{display:flex;align-items:flex-end;gap:6px;height:160px;padding:0 4px}
-.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
-.bar-fill{width:100%;background:#F2740B;border-radius:4px 4px 0 0;min-height:4px;position:relative}
-.bar-fill .bar-label{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;color:#F6F1E7;white-space:nowrap}
-.bar-month{font-size:10px;color:#7C7360;margin-top:6px}
-.footer{text-align:center;font-size:10px;color:#7C7360;margin-top:20px;padding-top:12px;border-top:1px solid #2C2317}
+.footer{text-align:center;font-size:10px;color:#7C7360;margin-top:24px;padding-top:12px;border-top:1px solid #2C2317}
+.footer a{color:#F2740B;text-decoration:none}
 .loading{text-align:center;padding:60px 0;color:#7C7360;font-size:14px}
 .spin{animation:sp .9s linear infinite;display:inline-block}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -1015,9 +1075,21 @@ let currentRange="d7";
 
 const compact=n=>{const v=+n||0,a=Math.abs(v);if(a>=1e6)return(v/1e6).toFixed(a>=1e7?0:1).replace(".",",")+"M";if(a>=1e5)return(v/1e3).toFixed(0)+"K";if(a>=1e4)return(v/1e3).toFixed(1).replace(".",",")+"K";return new Intl.NumberFormat("es-AR",{maximumFractionDigits:0}).format(v)};
 const money=(n,c)=>{const v=+n||0;const s=c==="USD"?"US$ ":c==="DKK"?"DKK ":"$ ";if(Math.abs(v)>=1e5)return s+compact(v);return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:0}).format(v)};
-const cost=(n,c)=>{if(n==null)return"—";const v=+n||0;if(Math.abs(v)>=1e3)return money(v,c);return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:2}).format(v)};
-const pct=n=>n==null?"—":(+n||0).toFixed(2)+"%";
+const cost=(n,c)=>{if(n==null)return"\\u2014";const v=+n||0;if(Math.abs(v)>=1e3)return money(v,c);return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:2}).format(v)};
+const pct=n=>n==null?"\\u2014":(+n||0).toFixed(2)+"%";
 const monthNames=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+function svgDonut(segments,size){
+  const r=size/2-4,cx=size/2,cy=size/2,circ=2*Math.PI*r;
+  let offset=0;let paths='';
+  const colors=["#F2740B","#E8613E","#7C7360","#3FBE79"];
+  segments.forEach(function(s,i){
+    const len=circ*s.pct/100;
+    paths+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+(colors[i%4])+'" stroke-width="8" stroke-dasharray="'+len+' '+(circ-len)+'" stroke-dashoffset="'+(-offset)+'" transform="rotate(-90 '+cx+' '+cy+')"/>';
+    offset+=len;
+  });
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'+paths+'</svg>';
+}
 
 async function loadReport(range){
   currentRange=range;
@@ -1035,51 +1107,91 @@ async function loadReport(range){
 
 function render(d){
   const a=d.account||{};const c=d.currency||"ARS";
-  const rangeTxt=currentRange==="d7"?"7 días":currentRange==="d30"?"30 días":"Personalizado";
+  const rangeTxt=currentRange==="d7"?"7 d\\u00edas":currentRange==="d30"?"30 d\\u00edas":"Personalizado";
   const today=new Date().toLocaleDateString("es-AR",{day:"numeric",month:"long",year:"numeric"});
   const now=new Date();const dateSub=monthNames[now.getMonth()]+" "+now.getFullYear();
+  const clicks=a.clicks||0;
+  const cpc=clicks>0?a.spend/clicks:0;
 
-  let campRows=(d.campaigns||[]).filter(x=>(+x.spend||0)>0).map(x=>{
-    const active=x.status==="activa";
-    return '<div class="camp-row"><div class="name">'+(x.name||"—")+'</div><div class="r" style="color:#F2740B;font-weight:700">'+money(x.spend,c)+'</div><div class="r">'+compact(x.conversations)+'</div><div class="r">'+cost(x.cost_per_msg,c)+'</div><div class="r">'+(active?'<span class="active">Activa</span>':'<span class="paused">Pausada</span>')+'</div><div class="r" style="color:'+(+x.ctr>=1?"#3FBE79":"inherit")+'">'+pct(x.ctr)+'</div></div>';
+  // Trend costo por mensaje
+  const prevCPM=d.prev_cost_per_msg;
+  const curCPM=+(a.cost_per_msg)||0;
+  let trendHTML='';
+  if(prevCPM&&prevCPM>0){
+    const pctChg=Math.round((curCPM-prevCPM)/prevCPM*100);
+    const col=pctChg>0?"#E8613E":"#3FBE79";
+    trendHTML='<div class="trend"><span class="box" style="background:'+col+'"></span><span style="color:'+col+'">'+(pctChg>0?"+":"")+pctChg+'% vs. anterior</span></div>';
+  }
+
+  // Top 4 campaigns as "anuncios destacados"
+  const topAds=(d.campaigns||[]).filter(function(x){return(+x.spend||0)>0}).slice(0,4);
+  const videoIcon='<svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/></svg>';
+  let adsHTML=topAds.map(function(ad){
+    return '<div class="ad-card"><div class="ad-thumb">'+videoIcon+'<span>Video</span></div><div class="ad-info"><div class="ad-name">'+(ad.name||"Sin nombre")+'</div><div class="ad-metrics"><div class="ad-metric"><div class="ad-metric-label">Mensajes</div><div class="ad-metric-value">'+compact(ad.conversations)+'</div></div><div class="ad-metric"><div class="ad-metric-label" style="text-align:right">Costo</div><div class="ad-metric-value" style="color:#F2740B;text-align:right">'+money(ad.spend,c)+'</div></div></div></div></div>';
   }).join("");
 
+  // Audiencia
+  const aud=d.audience;
+  let audHTML='';
+  if(aud){
+    const gender=aud.gender||[];const platform=aud.platform||[];const age=aud.age||[];
+    const gDonut=gender.length?svgDonut(gender,56):'';
+    const pDonut=platform.length?svgDonut(platform,56):'';
+    const gLegend=gender.map(function(g,i){var cols=["#F2740B","#E8613E","#7C7360","#3FBE79"];return '<div><span class="dot" style="background:'+cols[i%4]+'"></span>'+g.pct+'% '+g.label+'</div>';}).join("");
+    const pLegend=platform.map(function(p,i){var cols=["#F2740B","#E8613E","#7C7360","#3FBE79"];return '<div><span class="dot" style="background:'+cols[i%4]+'"></span>'+p.pct+'% '+p.label+'</div>';}).join("");
+    const maxAge=Math.max.apply(null,age.map(function(x){return x.pct}).concat([1]));
+    const ageBars=age.map(function(x){
+      var h=Math.max(Math.round(x.pct/maxAge*40),4);
+      return '<div class="age-col"><div class="age-bar" style="height:'+h+'px"></div><div class="age-label">'+x.label+'</div><div class="age-pct">'+x.pct+'%</div></div>';
+    }).join("");
+
+    audHTML='<div class="section-title">Audiencia</div><div class="aud-section">'
+      +(gender.length||platform.length?'<div class="aud-row">'
+        +(gender.length?'<div class="aud-box"><div class="aud-title">G\\u00e9nero</div><div class="donut-row">'+gDonut+'<div class="donut-legend">'+gLegend+'</div></div></div>':'')
+        +(platform.length?'<div class="aud-box"><div class="aud-title">Plataforma</div><div class="donut-row">'+pDonut+'<div class="donut-legend">'+pLegend+'</div></div></div>':'')
+      +'</div>':'')
+      +(age.length?'<div class="aud-box" style="margin-top:0"><div class="aud-title">Edad</div><div class="age-bars">'+ageBars+'</div></div>':'')
+    +'</div>';
+  }
+
+  // Chart mensual
   const monthly=d.monthly||[];
-  const maxConv=Math.max(...monthly.map(m=>m.conversations||0),1);
-  let chartBars=monthly.map(m=>{
-    const h=Math.max(Math.round((m.conversations/maxConv)*140),4);
-    return '<div class="bar-col"><div class="bar-fill" style="height:'+h+'px"><span class="bar-label">'+m.conversations+'</span></div><div class="bar-month">'+m.label+'</div></div>';
+  const maxConv=Math.max.apply(null,monthly.map(function(m){return m.conversations||0}).concat([1]));
+  let chartBars=monthly.map(function(m){
+    const h=Math.max(Math.round((m.conversations/maxConv)*140),8);
+    return '<div class="bar-col"><div class="bar-fill" style="height:'+h+'px"><span class="bar-val">'+m.conversations+'</span></div><div class="bar-month">'+m.label+'</div></div>';
   }).join("");
 
   document.getElementById("app").innerHTML=
-    /* Hero header naranja */
     '<div class="hero"><div class="circle1"></div><div class="circle2"></div><div class="hero-content">'
     +'<div class="agency">Concepto Agencia</div>'
     +'<div class="title">Informe de pauta</div>'
     +'<div class="client">'+ACCOUNT_NAME+'</div>'
     +'<div class="date-sub">'+dateSub+'</div>'
-    +'<div class="badges"><span class="pill">Meta Ads</span><span class="pill">'+rangeTxt+'</span><span class="pill" style="background:rgba(63,190,121,0.3)">● En vivo</span></div>'
+    +'<div class="badges"><span class="pill">Meta Ads</span><span class="pill">'+rangeTxt+'</span></div>'
     +'</div></div>'
 
     +'<div class="body-content">'
 
-    +'<div class="range-bar"><button class="'+(currentRange==="d7"?"active":"")+'" onclick="loadReport('+"'d7'"+')">7 días</button><button class="'+(currentRange==="d30"?"active":"")+'" onclick="loadReport('+"'d30'"+')">30 días</button></div>'
+    +'<div class="range-bar"><button class="'+(currentRange==="d7"?"active":"")+'" onclick="loadReport('+"'d7'"+')">7 d\\u00edas</button><button class="'+(currentRange==="d30"?"active":"")+'" onclick="loadReport('+"'d30'"+')">30 d\\u00edas</button></div>'
 
     +'<div class="section-title">Resumen General</div>'
     +'<div class="stats">'
-    +'<div class="stat"><div class="label">Gasto total</div><div class="value tint">'+money(a.spend,c)+'</div></div>'
+    +'<div class="stat highlight"><div class="label orange">Gasto total</div><div class="value tint">'+money(a.spend,c)+'</div></div>'
     +'<div class="stat"><div class="label">Conversaciones</div><div class="value">'+compact(a.conversations)+'</div></div>'
-    +'<div class="stat"><div class="label">Costo por mensaje</div><div class="value">'+cost(a.cost_per_msg,c)+'</div></div>'
-    +'<div class="stat"><div class="label">Alcance</div><div class="value">'+compact(a.reach)+'</div></div>'
+    +'<div class="stat"><div class="label">Costo por mensaje</div><div class="value">'+cost(a.cost_per_msg,c)+'</div>'+trendHTML+'</div>'
     +'<div class="stat"><div class="label">Impresiones</div><div class="value">'+compact(a.impressions)+'</div></div>'
-    +'<div class="stat"><div class="label">CTR</div><div class="value" style="color:'+(+a.ctr>=1?"#3FBE79":"inherit")+'">'+pct(a.ctr)+'</div></div>'
+    +'<div class="stat"><div class="label">Total de clics</div><div class="value">'+compact(clicks)+'</div></div>'
+    +'<div class="stat"><div class="label">Costo por clic</div><div class="value">'+cost(cpc,c)+'</div></div>'
     +'</div>'
 
-    +(campRows?'<div class="campaigns"><h2>Campañas</h2><div class="camp-row head"><div>Campaña</div><div class="r">Gasto</div><div class="r">Conv.</div><div class="r">C/msj</div><div class="r">Estado</div><div class="r">CTR</div></div>'+campRows+'</div>':'')
+    +(topAds.length?'<div class="section-title">Anuncios Destacados</div><div class="ads-grid">'+adsHTML+'</div>':'')
 
-    +(monthly.length?'<div class="chart-box"><h2>Rendimiento mensual</h2><div class="bars">'+chartBars+'</div></div>':'')
+    +audHTML
 
-    +'<div class="footer">Reporte generado por Concepto Agencia · '+today+'</div>'
+    +(monthly.length?'<div class="section-title">Rendimiento Mensual</div><div class="chart-box"><div class="bars">'+chartBars+'</div><div class="chart-legend"><span><span class="leg-dot" style="background:#F2740B"></span> Real</span><span><span class="leg-dot" style="background:#3A2F1E;border:1.5px solid #3A2F1E"></span> Objetivo</span></div></div>':'')
+
+    +'<div class="footer">Generado por <a href="https://conceptoagencia.com.ar" target="_blank">Concepto Agencia</a> \\u00b7 conceptoagencia.com.ar</div>'
     +'</div>';
 }
 

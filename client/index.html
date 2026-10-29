@@ -432,6 +432,48 @@ function MonthlyChart({accountId,cur}){
 }
 
 /* ================================================================ */
+/* SHARE REPORT BUTTON                                               */
+/* ================================================================ */
+function ShareReportButton({accountId}){
+  const[state,setState]=useState("idle"); // idle|loading|ready|copied|error
+  const[url,setUrl]=useState(null);
+
+  function generate(){
+    setState("loading");
+    apiFetch("/api/report-token/"+accountId,{method:"POST"})
+      .then(function(r){if(r&&r.url){setUrl(r.url);setState("ready")}else setState("error")})
+      .catch(function(){setState("error")});
+  }
+
+  function copyLink(){
+    if(!url)return;
+    navigator.clipboard.writeText(url).then(function(){setState("copied");setTimeout(function(){setState("ready")},2000)}).catch(function(){
+      var t=document.createElement("textarea");t.value=url;document.body.appendChild(t);t.select();document.execCommand("copy");document.body.removeChild(t);setState("copied");setTimeout(function(){setState("ready")},2000);
+    });
+  }
+
+  function revoke(){
+    if(!confirm("¿Revocar el link público de este reporte?"))return;
+    apiFetch("/api/report-token/"+accountId,{method:"DELETE"}).then(function(){setUrl(null);setState("idle")}).catch(function(){});
+  }
+
+  useEffect(function(){
+    apiFetch("/api/report-token/"+accountId).then(function(r){if(r&&r.token){setUrl(r.url);setState("ready")}}).catch(function(){});
+  },[accountId]);
+
+  if(state==="idle")return h("button",{onClick:generate,style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.green}`,background:D.greenSoft,color:D.green,cursor:"pointer"}},icon("Share2",14,D.green),"Compartir reporte");
+
+  if(state==="loading")return h("button",{disabled:true,style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.dim,cursor:"default"}},h("span",{className:"spin"},icon("Loader2",14)),"Generando link…");
+
+  if(state==="error")return h("button",{onClick:generate,style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.red}`,background:D.redSoft,color:D.red,cursor:"pointer"}},icon("AlertTriangle",14,D.red),"Error — reintentar");
+
+  // ready or copied
+  return h("div",{style:{display:"inline-flex",alignItems:"center",gap:4}},
+    h("button",{onClick:copyLink,style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${state==="copied"?D.green:D.green}`,background:state==="copied"?D.green+"22":D.greenSoft,color:D.green,cursor:"pointer"}},icon(state==="copied"?"Check":"Link",14,D.green),state==="copied"?"¡Copiado!":"Copiar link cliente"),
+    h("button",{onClick:revoke,title:"Revocar link",style:{display:"inline-flex",alignItems:"center",padding:"8px",borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.faint,cursor:"pointer"}},icon("X",13,D.faint)));
+}
+
+/* ================================================================ */
 /* DETAIL                                                            */
 /* ================================================================ */
 function Detail({account,range,setRange}){
@@ -525,7 +567,8 @@ function Detail({account,range,setRange}){
         ]).then(function(r){finish(r[0],(r[1][account.id]||{}).monthlyGoals)}).catch(function(){finish([],{})});
         setTimeout(function(){finish([],{})},10000);
       },disabled:st!=="done",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.orange}`,background:D.orangeSoft,color:D.orange,cursor:"pointer",opacity:st!=="done"?.5:1}},icon("Download",14,D.orange),"Exportar PDF"),
-      h("button",{onClick:function(){run(true)},disabled:st==="loading",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.text,cursor:"pointer",opacity:st==="loading"?.6:1}},st==="loading"?h("span",{className:"spin"},icon("Loader2",14)):icon("RefreshCw",14),st==="loading"?"Trayendo\u2026":"Actualizar")),
+      h("button",{onClick:function(){run(true)},disabled:st==="loading",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.text,cursor:"pointer",opacity:st==="loading"?.6:1}},st==="loading"?h("span",{className:"spin"},icon("Loader2",14)):icon("RefreshCw",14),st==="loading"?"Trayendo\u2026":"Actualizar"),
+      h(ShareReportButton,{accountId:account.id})),
 
     st==="error"&&h("div",{style:{background:D.redSoft,border:`1px solid ${D.red}44`,borderRadius:12,padding:14,color:D.text,fontSize:13,display:"flex",gap:10,alignItems:"flex-start",marginBottom:14}},icon("AlertTriangle",16,D.red),h("div",{style:{flex:1}},err),h("button",{onClick:function(){run(true)},style:{color:D.red,background:"none",border:"none",fontWeight:700,cursor:"pointer"}},"Reintentar")),
 

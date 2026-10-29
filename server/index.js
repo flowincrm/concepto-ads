@@ -210,6 +210,7 @@ async function fetchAccountMetrics(accountId, range, from, to) {
         reach: parseInt(c.reach || 0),
         impressions: parseInt(c.impressions || 0),
         ctr: parseFloat(c.ctr || 0),
+        clicks: parseInt(c.clicks || 0),
         ig_follows: extractAction(c.actions, "follow"),
       };
     })
@@ -866,8 +867,33 @@ app.get("/api/public/:token", async (req, res) => {
     const publicCampaigns = (data.campaigns || []).map(c => ({
       name: c.name, spend: c.spend, conversations: c.conversations,
       cost_per_msg: c.cost_per_msg, reach: c.reach, impressions: c.impressions,
-      ctr: c.ctr, status: c.status, objective: c.objective,
+      ctr: c.ctr, status: c.status, objective: c.objective, clicks: c.clicks || 0,
     }));
+
+    // Audiencia a nivel cuenta (gender, age, platform)
+    let audience = null;
+    try {
+      const rp2 = rangeToParams(range, from, to);
+      const BASE2 = { fields: "spend,impressions,reach,actions", level: "account", ...rp2 };
+      const [gR, aR, pR] = await Promise.allSettled([
+        fbGet(`act_${accountId}/insights`, { ...BASE2, breakdowns: "gender" }),
+        fbGet(`act_${accountId}/insights`, { ...BASE2, breakdowns: "age" }),
+        fbGet(`act_${accountId}/insights`, { ...BASE2, breakdowns: "publisher_platform" }),
+      ]);
+      const toRows2 = s => s.status === "fulfilled" ? (s.value.data || []) : [];
+      const toPct2 = (rows, key) => {
+        const total = rows.reduce((s, r) => s + parseFloat(r.impressions || 0), 0);
+        if (!total) return [];
+        return rows.map(r => ({ label: r[key] || "Otro", pct: Math.round(parseFloat(r.impressions||0) / total * 100) })).sort((a, b) => b.pct - a.pct).slice(0, 8);
+      };
+      const tG = g => g === "female" ? "Mujeres" : g === "male" ? "Hombres" : "Otro";
+      const tP = p => ({ facebook: "Facebook", instagram: "Instagram", audience_network: "Audience Network", messenger: "Messenger" }[p] || p);
+      audience = {
+        gender: toPct2(toRows2(gR), "gender").map(r => ({ ...r, label: tG(r.label) })),
+        age: toPct2(toRows2(aR), "age"),
+        platform: toPct2(toRows2(pR), "publisher_platform").map(r => ({ ...r, label: tP(r.label) })),
+      };
+    } catch {}
 
     // Monthly data para el gráfico
     let monthly = [];
@@ -903,8 +929,10 @@ app.get("/api/public/:token", async (req, res) => {
       currency: data.currency,
       accountName,
       account: data.account,
+      prev_cost_per_msg: data.prev_cost_per_msg,
       campaigns: publicCampaigns,
       monthly,
+      audience,
     });
   } catch (e) {
     res.status(503).json({ error: "No se pudieron obtener las métricas" });
@@ -930,16 +958,25 @@ function clientReportHTML(token, accountId, accountName) {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>${accountName} · Reporte de Performance</title>
+<title>${accountName} · Informe de pauta</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:#0E0C07;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#F6F1E7;min-height:100vh;padding:16px}
+body{background:#0E0C07;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#F6F1E7;min-height:100vh}
 .container{max-width:900px;margin:0 auto}
-.header{display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #F2740B}
-.header h1{font-size:20px;font-weight:800}
-.header .sub{font-size:12px;color:#7C7360}
-.badge{font-size:11px;font-weight:700;color:#3FBE79;background:#16321F;padding:4px 10px;border-radius:20px;margin-left:auto}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px}
+/* Hero header */
+.hero{background:linear-gradient(135deg,#D4650A 0%,#F2940B 60%,#F5B73B 100%);padding:32px 28px 28px;position:relative;overflow:hidden}
+.hero .circle1{position:absolute;right:-30px;top:-30px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,0.12)}
+.hero .circle2{position:absolute;right:40px;bottom:-40px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.07)}
+.hero-content{position:relative;z-index:1}
+.hero .agency{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.8);margin-bottom:6px}
+.hero .title{font-size:28px;font-weight:800;color:#fff;line-height:1.2}
+.hero .client{font-size:17px;color:rgba(255,255,255,0.85);margin-top:3px;font-weight:500}
+.hero .date-sub{font-size:12px;color:rgba(255,255,255,0.65);margin-top:8px}
+.hero .badges{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.hero .pill{background:rgba(0,0,0,0.2);color:#fff;font-size:10px;font-weight:700;padding:4px 12px;border-radius:20px}
+.body-content{padding:20px 24px 24px}
+.section-title{font-size:12px;font-weight:800;color:#F2740B;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:22px}
 .stat{background:#261E14;border:1px solid #3A2F1E;border-radius:14px;padding:14px}
 .stat .label{font-size:10px;color:#7C7360;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
 .stat .value{font-size:22px;font-weight:800;margin-top:6px;line-height:1.1}
@@ -980,6 +1017,7 @@ const compact=n=>{const v=+n||0,a=Math.abs(v);if(a>=1e6)return(v/1e6).toFixed(a>
 const money=(n,c)=>{const v=+n||0;const s=c==="USD"?"US$ ":c==="DKK"?"DKK ":"$ ";if(Math.abs(v)>=1e5)return s+compact(v);return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:0}).format(v)};
 const cost=(n,c)=>{if(n==null)return"—";const v=+n||0;if(Math.abs(v)>=1e3)return money(v,c);return new Intl.NumberFormat("es-AR",{style:"currency",currency:c||"ARS",maximumFractionDigits:2}).format(v)};
 const pct=n=>n==null?"—":(+n||0).toFixed(2)+"%";
+const monthNames=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
 async function loadReport(range){
   currentRange=range;
@@ -997,15 +1035,15 @@ async function loadReport(range){
 
 function render(d){
   const a=d.account||{};const c=d.currency||"ARS";
-  const phrase=currentRange==="d7"?"Últimos 7 días":currentRange==="d30"?"Últimos 30 días":"Período personalizado";
+  const rangeTxt=currentRange==="d7"?"7 días":currentRange==="d30"?"30 días":"Personalizado";
   const today=new Date().toLocaleDateString("es-AR",{day:"numeric",month:"long",year:"numeric"});
+  const now=new Date();const dateSub=monthNames[now.getMonth()]+" "+now.getFullYear();
 
   let campRows=(d.campaigns||[]).filter(x=>(+x.spend||0)>0).map(x=>{
     const active=x.status==="activa";
     return '<div class="camp-row"><div class="name">'+(x.name||"—")+'</div><div class="r" style="color:#F2740B;font-weight:700">'+money(x.spend,c)+'</div><div class="r">'+compact(x.conversations)+'</div><div class="r">'+cost(x.cost_per_msg,c)+'</div><div class="r">'+(active?'<span class="active">Activa</span>':'<span class="paused">Pausada</span>')+'</div><div class="r" style="color:'+(+x.ctr>=1?"#3FBE79":"inherit")+'">'+pct(x.ctr)+'</div></div>';
   }).join("");
 
-  // Chart bars
   const monthly=d.monthly||[];
   const maxConv=Math.max(...monthly.map(m=>m.conversations||0),1);
   let chartBars=monthly.map(m=>{
@@ -1014,10 +1052,20 @@ function render(d){
   }).join("");
 
   document.getElementById("app").innerHTML=
-    '<div class="header"><div><h1>'+ACCOUNT_NAME+'</h1><div class="sub">'+phrase+' · '+today+'</div></div><div class="badge">● En vivo</div></div>'
+    /* Hero header naranja */
+    '<div class="hero"><div class="circle1"></div><div class="circle2"></div><div class="hero-content">'
+    +'<div class="agency">Concepto Agencia</div>'
+    +'<div class="title">Informe de pauta</div>'
+    +'<div class="client">'+ACCOUNT_NAME+'</div>'
+    +'<div class="date-sub">'+dateSub+'</div>'
+    +'<div class="badges"><span class="pill">Meta Ads</span><span class="pill">'+rangeTxt+'</span><span class="pill" style="background:rgba(63,190,121,0.3)">● En vivo</span></div>'
+    +'</div></div>'
+
+    +'<div class="body-content">'
 
     +'<div class="range-bar"><button class="'+(currentRange==="d7"?"active":"")+'" onclick="loadReport('+"'d7'"+')">7 días</button><button class="'+(currentRange==="d30"?"active":"")+'" onclick="loadReport('+"'d30'"+')">30 días</button></div>'
 
+    +'<div class="section-title">Resumen General</div>'
     +'<div class="stats">'
     +'<div class="stat"><div class="label">Gasto total</div><div class="value tint">'+money(a.spend,c)+'</div></div>'
     +'<div class="stat"><div class="label">Conversaciones</div><div class="value">'+compact(a.conversations)+'</div></div>'
@@ -1031,7 +1079,8 @@ function render(d){
 
     +(monthly.length?'<div class="chart-box"><h2>Rendimiento mensual</h2><div class="bars">'+chartBars+'</div></div>':'')
 
-    +'<div class="footer">Reporte generado por Concepto Agencia · '+today+'</div>';
+    +'<div class="footer">Reporte generado por Concepto Agencia · '+today+'</div>'
+    +'</div>';
 }
 
 loadReport("d7");

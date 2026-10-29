@@ -805,12 +805,14 @@ async function checkCreativeFatigue() {
 /* ------------------------------------------------------------------ */
 
 // Generar/obtener token de reporte
+function baseURL(req) { return `${req.headers["x-forwarded-proto"] || req.protocol}://${req.get("host")}`; }
+
 app.post("/api/report-token/:id", auth, async (req, res) => {
   const { id } = req.params;
   const tokens = await cache.get("global:report-tokens") || {};
 
   if (tokens[id]) {
-    return res.json({ token: tokens[id], url: `${req.protocol}://${req.get("host")}/r/${tokens[id]}` });
+    return res.json({ token: tokens[id], url: `${baseURL(req)}/r/${tokens[id]}` });
   }
 
   const token = crypto.randomBytes(16).toString("hex");
@@ -822,7 +824,7 @@ app.post("/api/report-token/:id", auth, async (req, res) => {
   await cache.set("global:report-tokens", tokens, 86400 * 365);
   await cache.set("global:token-accounts", reverseTokens, 86400 * 365);
 
-  res.json({ token, url: `${req.protocol}://${req.get("host")}/r/${token}` });
+  res.json({ token, url: `${baseURL(req)}/r/${token}` });
 });
 
 // Obtener token existente (GET)
@@ -830,7 +832,7 @@ app.get("/api/report-token/:id", auth, async (req, res) => {
   const { id } = req.params;
   const tokens = await cache.get("global:report-tokens") || {};
   if (tokens[id]) {
-    return res.json({ token: tokens[id], url: `${req.protocol}://${req.get("host")}/r/${tokens[id]}` });
+    return res.json({ token: tokens[id], url: `${baseURL(req)}/r/${tokens[id]}` });
   }
   res.json({ token: null });
 });
@@ -919,10 +921,10 @@ app.get("/r/:token", async (req, res) => {
   let accountName = "Cuenta";
   try { const ai = await fbGet(`act_${accountId}`, { fields: "name" }); accountName = ai.name || accountName; } catch {}
 
-  res.send(clientReportHTML(token, accountId, accountName, req.protocol + "://" + req.get("host")));
+  res.send(clientReportHTML(token, accountId, accountName));
 });
 
-function clientReportHTML(token, accountId, accountName, baseUrl) {
+function clientReportHTML(token, accountId, accountName) {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -971,7 +973,6 @@ body{background:#0E0C07;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',
 </div>
 <script>
 const TOKEN="${token}";
-const BASE="${baseUrl}";
 const ACCOUNT_NAME="${accountName.replace(/"/g, '\\"')}";
 let currentRange="d7";
 
@@ -985,7 +986,7 @@ async function loadReport(range){
   const app=document.getElementById("app");
   app.innerHTML='<div class="loading"><span class="spin">⟳</span> Cargando métricas…</div>';
   try{
-    const res=await fetch(BASE+"/api/public/"+TOKEN+"?range="+range);
+    const res=await fetch("/api/public/"+TOKEN+"?range="+range);
     if(!res.ok)throw new Error("Error "+res.status);
     const d=await res.json();
     render(d);
@@ -1015,7 +1016,7 @@ function render(d){
   document.getElementById("app").innerHTML=
     '<div class="header"><div><h1>'+ACCOUNT_NAME+'</h1><div class="sub">'+phrase+' · '+today+'</div></div><div class="badge">● En vivo</div></div>'
 
-    +'<div class="range-bar"><button class="'+(currentRange==="d7"?"active":"")+'" onclick="loadReport(\\\'d7\\\')">7 días</button><button class="'+(currentRange==="d30"?"active":"")+'" onclick="loadReport(\\\'d30\\\')">30 días</button></div>'
+    +'<div class="range-bar"><button class="'+(currentRange==="d7"?"active":"")+'" onclick="loadReport('+"'d7'"+')">7 días</button><button class="'+(currentRange==="d30"?"active":"")+'" onclick="loadReport('+"'d30'"+')">30 días</button></div>'
 
     +'<div class="stats">'
     +'<div class="stat"><div class="label">Gasto total</div><div class="value tint">'+money(a.spend,c)+'</div></div>'

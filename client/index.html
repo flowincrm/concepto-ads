@@ -80,15 +80,19 @@ const currentWeek=(()=>{const d=new Date();const jan1=new Date(d.getFullYear(),0
 function exportPDF(account,data,alerts,range,monthlyData,goals,w){
     var cur=data.currency||account.cur;
     var acc=data.account||{};
-    var phrase=range.key==="d7"?"\u00daltimos 7 d\u00edas":range.key==="d30"?"\u00daltimos 30 d\u00edas":range.from+" al "+range.to;
+    var rangeTxt=range.key==="d7"?"7 d\u00edas":range.key==="d30"?"30 d\u00edas":range.from+" \u2013 "+range.to;
     var today=new Date().toLocaleDateString("es-AR",{day:"numeric",month:"long",year:"numeric"});
+    var monthNm=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    var now=new Date();var dateSub=monthNm[now.getMonth()]+" "+now.getFullYear();
     var camps=(data.campaigns||[]).filter(function(c){return toNum(c.spend)>0});
+    var clicks=parseInt(acc.clicks||0);
+    var cpc=clicks>0?toNum(acc.spend)/clicks:0;
     var maxConv=Math.max.apply(null,(monthlyData||[]).map(function(d){return d.conversations||0}).concat([1]));
     var allGoalVals=Object.values(goals||{}).filter(function(v){return v}).map(Number);
     var maxH=Math.max(maxConv,Math.max.apply(null,allGoalVals.concat([1])));
 
     var trendCPM=data.prev_cost_per_msg?Math.round((toNum(acc.cost_per_msg)-data.prev_cost_per_msg)/data.prev_cost_per_msg*100):null;
-    var trendTxt=trendCPM!==null?'<div style="font-size:10px;color:'+(trendCPM>0?"#E8613E":"#3FBE79")+';margin-top:2px">'+(trendCPM>0?"+":"")+trendCPM+'% vs. anterior</div>':"";
+    var trendTxt=trendCPM!==null?'<div style="font-size:10px;display:flex;align-items:center;gap:4px;margin-top:3px"><span style="width:10px;height:10px;border-radius:2px;background:'+(trendCPM>0?"#E8613E":"#3FBE79")+'"></span><span style="color:'+(trendCPM>0?"#E8613E":"#3FBE79")+'">'+(trendCPM>0?"+":"")+trendCPM+'% vs. anterior</span></div>':"";
 
     var chartBars=(monthlyData||[]).map(function(d){
       var mIdx=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"].indexOf(d.label);
@@ -103,76 +107,102 @@ function exportPDF(account,data,alerts,range,monthlyData,goals,w){
         +(g?'<div style="width:100%;height:'+goalH+'px;border:1.5px solid #3A2F1E;border-radius:4px 4px 0 0;position:absolute;bottom:0;background:#1F1810"></div>':'')
         +'<div style="width:100%;height:'+Math.max(barH,18)+'px;background:#F2740B;border-radius:4px 4px 0 0;position:relative;z-index:1;display:flex;align-items:flex-start;justify-content:center;padding-top:3px"><span style="font-size:9px;color:#fff;font-weight:700">'+d.conversations+'</span></div>'
         +'</div>'
-        +(diff!==null?'<div style="margin-top:4px"><div style="font-size:8.5px;color:'+diffColor+';font-weight:700">'+(diff>=0?"+":"")+diff+'</div></div>':'')
+        +(diff!==null?'<div style="margin-top:4px"><div style="font-size:8.5px;color:'+diffColor+';font-weight:700;background:#261E14;border:1px solid #3A2F1E;border-radius:4px;padding:1px 5px;display:inline-block">'+(diff>=0?"+":"")+diff+'</div></div>':'')
         +'<div style="font-size:10px;color:#7C7360;margin-top:'+(diff!==null?'2':'6')+'px">'+d.label+'</div>'
         +'</div>';
     }).join("");
 
-    var campRows=camps.map(function(c){
-      var ctrColor=toNum(c.ctr)>=1?"#3FBE79":"#F6F1E7";
-      var statusColor=c.status==="activa"?"#3FBE79":"#7C7360";
-      var statusText=c.status==="activa"?"Activa":"Pausada";
-      return '<tr style="border-bottom:1px solid #2C2317">'
-        +'<td style="padding:9px 8px;font-weight:600;color:#F6F1E7;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+c.name+'</td>'
-        +'<td style="padding:9px 8px;text-align:right;color:#F2740B;font-weight:700">'+heroMoney(c.spend,cur)+'</td>'
-        +'<td style="padding:9px 8px;text-align:right;color:#F6F1E7">'+heroNum(c.conversations)+'</td>'
-        +'<td style="padding:9px 8px;text-align:right;color:#F6F1E7">'+heroCost(c.cost_per_msg,cur)+'</td>'
-        +'<td style="padding:9px 8px;text-align:right;color:'+statusColor+';font-weight:600">'+statusText+'</td>'
-        +'<td style="padding:9px 8px;text-align:right;color:'+ctrColor+';font-weight:600">'+pct(c.ctr)+'</td>'
-        +'</tr>';
+    /* Top 4 anuncios destacados */
+    var topAds=camps.slice(0,4);
+    var adsHTML=topAds.map(function(c){
+      return '<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;overflow:hidden">'
+        +'<div style="background:#1A1408;height:70px;display:flex;align-items:center;justify-content:center;color:#7C7360;font-size:10px;flex-direction:column;gap:3px;border-bottom:1px solid #3A2F1E">'
+        +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C7360" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/></svg>Video</div>'
+        +'<div style="padding:8px 10px"><div style="font-size:11px;font-weight:700;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+c.name+'</div>'
+        +'<div style="display:flex;justify-content:space-between"><div><div style="font-size:8px;color:#7C7360;text-transform:uppercase;letter-spacing:.3px;font-weight:600">Mensajes</div><div style="font-size:13px;font-weight:800;margin-top:1px">'+heroNum(c.conversations)+'</div></div>'
+        +'<div style="text-align:right"><div style="font-size:8px;color:#7C7360;text-transform:uppercase;letter-spacing:.3px;font-weight:600">Costo</div><div style="font-size:13px;font-weight:800;color:#F2740B;margin-top:1px">'+heroMoney(c.spend,cur)+'</div></div></div></div></div>';
     }).join("");
 
-    var alertRows=(alerts||[]).map(function(a){
-      var icon=a.sev==="green"?"\u2714":"\u26a0";
-      var color=a.sev==="green"?"#3FBE79":a.sev==="red"?"#E8613E":"#E6A93A";
-      var bg=a.sev==="green"?"#3FBE7915":a.sev==="red"?"#E8613E15":"#E6A93A15";
-      var border=a.sev==="green"?"#3FBE7933":a.sev==="red"?"#E8613E33":"#E6A93A33";
-      return '<div style="display:flex;gap:8px;align-items:flex-start;background:'+bg+';border:1px solid '+border+';border-radius:8px;padding:8px 10px;margin-bottom:6px"><span style="color:'+color+';flex-shrink:0">'+icon+'</span><span style="color:#F6F1E7;font-size:12px;line-height:1.5">'+a.text+'</span></div>';
-    }).join("");
+    /* Audiencia \u2014 datos de data.audience si existen */
+    var aud=data.audience||null;
+    var audHTML='';
+    if(aud){
+      var gender=aud.gender||[];var platform=aud.platform||[];var age=aud.age||[];
+      var donutColors=["#F2740B","#E8613E","#7C7360","#3FBE79"];
+      function svgDonut(segs,sz){var r=sz/2-4,cx=sz/2,cy=sz/2,circ=2*Math.PI*r,off=0,p='';segs.forEach(function(s,i){var len=circ*s.pct/100;p+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+donutColors[i%4]+'" stroke-width="8" stroke-dasharray="'+len+' '+(circ-len)+'" stroke-dashoffset="'+(-off)+'" transform="rotate(-90 '+cx+' '+cy+')"/>';off+=len;});return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 '+sz+' '+sz+'">'+p+'</svg>';}
+      var gDonut=gender.length?svgDonut(gender,50):'';
+      var pDonut=platform.length?svgDonut(platform,50):'';
+      var gLeg=gender.map(function(g,i){return '<div style="font-size:10px;line-height:1.5"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+donutColors[i%4]+';margin-right:3px"></span>'+g.pct+'% '+g.label+'</div>';}).join("");
+      var pLeg=platform.map(function(p,i){return '<div style="font-size:10px;line-height:1.5"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+donutColors[i%4]+';margin-right:3px"></span>'+p.pct+'% '+p.label+'</div>';}).join("");
+      var maxAge=Math.max.apply(null,age.map(function(x){return x.pct}).concat([1]));
+      var ageBars=age.map(function(x){var h=Math.max(Math.round(x.pct/maxAge*35),3);return '<div style="flex:1;display:flex;flex-direction:column;align-items:center"><div style="width:100%;height:'+h+'px;border-radius:3px;background:#F2740B"></div><div style="font-size:9px;color:#7C7360;margin-top:4px">'+x.label+'</div><div style="font-size:10px;font-weight:700;color:#F2740B;margin-top:1px">'+x.pct+'%</div></div>';}).join("");
 
-    var doc='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reporte '+account.name+'</title>'
-      +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#F6F1E7;background:#0E0C07;padding:20px 22px;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}@media print{body{padding:14px}@page{margin:6mm;size:A4}}</style></head><body>'
+      audHTML='<div style="font-size:11px;font-weight:800;color:#F2740B;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;margin-top:16px">Audiencia</div>'
+        +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:14px;margin-bottom:14px">'
+        +(gender.length||platform.length?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+          +(gender.length?'<div style="background:#1F1810;border-radius:8px;padding:12px"><div style="font-size:11px;font-weight:700;margin-bottom:8px">G\u00e9nero</div><div style="display:flex;align-items:center;gap:10px">'+gDonut+'<div>'+gLeg+'</div></div></div>':'')
+          +(platform.length?'<div style="background:#1F1810;border-radius:8px;padding:12px"><div style="font-size:11px;font-weight:700;margin-bottom:8px">Plataforma</div><div style="display:flex;align-items:center;gap:10px">'+pDonut+'<div>'+pLeg+'</div></div></div>':'')
+        +'</div>':'')
+        +(age.length?'<div style="background:#1F1810;border-radius:8px;padding:12px"><div style="font-size:11px;font-weight:700;margin-bottom:8px">Edad</div><div style="display:flex;gap:6px">'+ageBars+'</div></div>':'')
+        +'</div>';
+    }
 
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:12px;border-bottom:2px solid #F2740B">'
-      +'<div><div style="font-size:11px;color:#F2740B;font-weight:700;letter-spacing:1px;text-transform:uppercase">Reporte de performance</div>'
-      +'<div style="font-size:20px;font-weight:800;margin-top:3px;color:#F6F1E7">'+account.name+'</div>'
-      +'<div style="font-size:12px;color:#7C7360;margin-top:3px">'+phrase+' \u00b7 '+today+'</div></div>'
-      +'<div style="font-size:11px;font-weight:700;color:#3FBE79;background:#16321F;padding:4px 10px;border-radius:20px">\u25cf En vivo</div></div>'
+    var doc='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Informe '+account.name+'</title>'
+      +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#F6F1E7;background:#0E0C07;padding:0;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}@media print{@page{margin:0;size:A4}}</style></head><body>'
 
-      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px">'
-      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:10px 12px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Gasto total</div><div style="font-size:18px;font-weight:800;color:#F2740B;margin-top:4px">'+heroMoney(acc.spend,cur)+'</div></div>'
-      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:10px 12px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Conversaciones</div><div style="font-size:18px;font-weight:800;color:#F6F1E7;margin-top:4px">'+heroNum(acc.conversations)+'</div></div>'
-      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:10px 12px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Costo por mensaje</div><div style="font-size:18px;font-weight:800;color:#F6F1E7;margin-top:4px">'+heroCost(acc.cost_per_msg,cur)+'</div>'+trendTxt+'</div>'
-      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:10px 12px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Alcance</div><div style="font-size:18px;font-weight:800;color:#F6F1E7;margin-top:4px">'+heroNum(acc.reach)+'</div></div>'
-      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:10px 12px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Impresiones</div><div style="font-size:18px;font-weight:800;color:#F6F1E7;margin-top:4px">'+heroNum(acc.impressions)+'</div></div>'
-      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:10px 12px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">CTR</div><div style="font-size:18px;font-weight:800;color:'+(toNum(acc.ctr)>=1?"#3FBE79":"#F6F1E7")+';margin-top:4px">'+pct(acc.ctr)+'</div></div>'
+      /* Hero */
+      +'<div style="background:linear-gradient(135deg,#D4650A 0%,#F2940B 60%,#F5B73B 100%);padding:28px 24px 24px;position:relative;overflow:hidden">'
+      +'<div style="position:absolute;right:-30px;top:-30px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,0.12)"></div>'
+      +'<div style="position:absolute;right:40px;bottom:-40px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.07)"></div>'
+      +'<div style="position:relative;z-index:1">'
+      +'<div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.8);margin-bottom:6px">Concepto Agencia</div>'
+      +'<div style="font-size:26px;font-weight:800;color:#fff;line-height:1.2">Informe de pauta</div>'
+      +'<div style="font-size:16px;color:rgba(255,255,255,0.85);margin-top:2px;font-weight:500">'+account.name+'</div>'
+      +'<div style="font-size:12px;color:rgba(255,255,255,0.65);margin-top:6px">'+dateSub+'</div>'
+      +'<div style="display:flex;gap:6px;margin-top:10px">'
+      +'<span style="background:rgba(0,0,0,0.2);color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px">Meta Ads</span>'
+      +'<span style="background:rgba(0,0,0,0.2);color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px">'+rangeTxt+'</span>'
+      +'</div></div></div>'
+
+      +'<div style="padding:20px 22px">'
+
+      /* Resumen General \u2014 2 columnas */
+      +'<div style="font-size:11px;font-weight:800;color:#F2740B;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px">Resumen General</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
+      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-left:3px solid #F2740B;border-radius:10px;padding:12px 14px"><div style="font-size:9.5px;color:#F2740B;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Gasto total</div><div style="font-size:20px;font-weight:800;color:#F2740B;margin-top:5px">'+heroMoney(acc.spend,cur)+'</div></div>'
+      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:12px 14px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Conversaciones</div><div style="font-size:20px;font-weight:800;color:#F6F1E7;margin-top:5px">'+heroNum(acc.conversations)+'</div></div>'
+      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:12px 14px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Costo por mensaje</div><div style="font-size:20px;font-weight:800;color:#F6F1E7;margin-top:5px">'+heroCost(acc.cost_per_msg,cur)+'</div>'+trendTxt+'</div>'
+      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:12px 14px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Impresiones</div><div style="font-size:20px;font-weight:800;color:#F6F1E7;margin-top:5px">'+heroNum(acc.impressions)+'</div></div>'
+      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:12px 14px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Total de clics</div><div style="font-size:20px;font-weight:800;color:#F6F1E7;margin-top:5px">'+heroNum(clicks)+'</div></div>'
+      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:12px 14px"><div style="font-size:9.5px;color:#7C7360;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Costo por clic</div><div style="font-size:20px;font-weight:800;color:#F6F1E7;margin-top:5px">'+heroCost(cpc,cur)+'</div></div>'
       +'</div>'
 
-      +'<div style="background:#1F1810;border:1px solid #3A2F1E;border-radius:12px;padding:14px 16px;margin-bottom:16px"><div style="font-size:11px;font-weight:800;color:#F2740B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Campa\u00f1as</div>'
-      +'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid #3A2F1E">'
-      +'<th style="text-align:left;padding:6px 8px;font-size:9.5px;color:#7C7360;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Campa\u00f1a</th>'
-      +'<th style="text-align:right;padding:6px 8px;font-size:9.5px;color:#7C7360;font-weight:700">Gasto</th>'
-      +'<th style="text-align:right;padding:6px 8px;font-size:9.5px;color:#7C7360;font-weight:700">Conv.</th>'
-      +'<th style="text-align:right;padding:6px 8px;font-size:9.5px;color:#7C7360;font-weight:700">C/msj</th>'
-      +'<th style="text-align:right;padding:6px 8px;font-size:9.5px;color:#7C7360;font-weight:700">Estado</th>'
-      +'<th style="text-align:right;padding:6px 8px;font-size:9.5px;color:#7C7360;font-weight:700">CTR</th>'
-      +'</tr></thead><tbody>'+campRows+'</tbody></table></div>'
+      /* Anuncios Destacados \u2014 2x2 grid */
+      +(topAds.length?'<div style="font-size:11px;font-weight:800;color:#F2740B;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Anuncios Destacados</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'+adsHTML+'</div>':'')
 
-      +(alertRows?'<div style="background:#1F1810;border:1px solid #3A2F1E;border-radius:12px;padding:14px 16px;margin-bottom:16px">'
-      +'<div style="font-size:11px;font-weight:800;color:#E6A93A;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">\u26a0 Alertas</div>'
-      +alertRows+'</div>':'')
+      /* Audiencia */
+      +audHTML
 
-      +(monthlyData&&monthlyData.length?'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:12px;padding:14px 16px;margin-bottom:16px">'
-      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><div style="font-size:11px;font-weight:800;color:#F2740B;text-transform:uppercase;letter-spacing:.5px">Rendimiento mensual</div>'
-      +'<div style="margin-left:auto;display:flex;gap:14px;font-size:10px;color:#7C7360">'
+      /* Alertas */
+      +(alerts&&alerts.length?'<div style="font-size:11px;font-weight:800;color:#E6A93A;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;margin-top:16px">\u26a0 Alertas</div>'
+      +'<div style="background:#1F1810;border:1px solid #3A2F1E;border-radius:10px;padding:12px;margin-bottom:14px">'
+      +alerts.map(function(a){var ic=a.sev==="green"?"\u2714":"\u26a0";var color=a.sev==="green"?"#3FBE79":a.sev==="red"?"#E8613E":"#E6A93A";var bg=a.sev==="green"?"#3FBE7915":a.sev==="red"?"#E8613E15":"#E6A93A15";var bdr=a.sev==="green"?"#3FBE7933":a.sev==="red"?"#E8613E33":"#E6A93A33";return '<div style="display:flex;gap:6px;align-items:flex-start;background:'+bg+';border:1px solid '+bdr+';border-radius:6px;padding:6px 8px;margin-bottom:4px"><span style="color:'+color+'">'+ic+'</span><span style="font-size:11px;line-height:1.4">'+a.text+'</span></div>';}).join("")
+      +'</div>':'')
+
+      /* Rendimiento mensual */
+      +(monthlyData&&monthlyData.length?'<div style="font-size:11px;font-weight:800;color:#F2740B;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;margin-top:16px">Rendimiento Mensual</div>'
+      +'<div style="background:#261E14;border:1px solid #3A2F1E;border-radius:10px;padding:14px 16px;margin-bottom:14px">'
+      +'<div style="display:flex;align-items:flex-end;gap:6px;height:130px">'+chartBars+'</div>'
+      +'<div style="display:flex;gap:14px;font-size:10px;color:#7C7360;margin-top:10px">'
       +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#F2740B;border-radius:2px;display:inline-block"></span> Real</span>'
       +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border:1.5px solid #3A2F1E;border-radius:2px;display:inline-block;background:#1F1810"></span> Objetivo</span>'
-      +'</div></div>'
-      +'<div style="display:flex;align-items:flex-end;gap:4px;padding:0 2px;height:140px">'+chartBars+'</div></div>':'')
+      +'</div></div>':'')
 
-      +'<div style="border-top:1px solid #2C2317;padding-top:10px;display:flex;justify-content:space-between;font-size:9px;color:#7C7360">'
-      +'<div>Reporte generado por Concepto Agencia</div><div>'+today+'</div></div>'
-      +'</body></html>';
+      /* Footer */
+      +'<div style="text-align:center;font-size:9px;color:#7C7360;margin-top:16px;padding-top:10px;border-top:1px solid #2C2317">'
+      +'Generado por <span style="color:#F2740B">Concepto Agencia</span> \u00b7 conceptoagencia.com.ar</div>'
+      +'</div></body></html>';
 
     w.document.open();w.document.write(doc);w.document.close();setTimeout(function(){w.print()},500);
   }
@@ -467,15 +497,16 @@ function ShareReportButton({accountId}){
     apiFetch("/api/report-token/"+accountId).then(function(r){if(r&&r.token){setUrl(r.url);setState("ready")}}).catch(function(){});
   },[accountId]);
 
-  if(state==="idle")return h("button",{onClick:generate,style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.green}`,background:D.greenSoft,color:D.green,cursor:"pointer"}},icon("Share2",14,D.green),"Compartir reporte");
+  if(state==="idle")return h("button",{onClick:generate,style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.green}`,background:D.greenSoft,color:D.green,cursor:"pointer"}},icon("ExternalLink",14,D.green),"Ver reporte");
 
   if(state==="loading")return h("button",{disabled:true,style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.dim,cursor:"default"}},h("span",{className:"spin"},icon("Loader2",14)),"Generando link…");
 
   if(state==="error")return h("button",{onClick:generate,style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.red}`,background:D.redSoft,color:D.red,cursor:"pointer"}},icon("AlertTriangle",14,D.red),"Error — reintentar");
 
-  // ready or copied
+  // ready — open report + copy option
   return h("div",{style:{display:"inline-flex",alignItems:"center",gap:4}},
-    h("button",{onClick:copyLink,style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${state==="copied"?D.green:D.green}`,background:state==="copied"?D.green+"22":D.greenSoft,color:D.green,cursor:"pointer"}},icon(state==="copied"?"Check":"Link",14,D.green),state==="copied"?"¡Copiado!":"Copiar link cliente"),
+    h("button",{onClick:function(){window.open(url,"_blank")},style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.green}`,background:D.greenSoft,color:D.green,cursor:"pointer"}},icon("ExternalLink",14,D.green),"Ver reporte"),
+    h("button",{onClick:copyLink,title:"Copiar link",style:{display:"inline-flex",alignItems:"center",padding:"8px",borderRadius:10,border:`1px solid ${D.line}`,background:state==="copied"?D.green+"22":D.card,color:state==="copied"?D.green:D.faint,cursor:"pointer"}},icon(state==="copied"?"Check":"Copy",13,state==="copied"?D.green:D.faint)),
     h("button",{onClick:revoke,title:"Revocar link",style:{display:"inline-flex",alignItems:"center",padding:"8px",borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.faint,cursor:"pointer"}},icon("X",13,D.faint)));
 }
 
@@ -566,12 +597,13 @@ function Detail({account,range,setRange}){
         if(!w){alert("Permit\u00ed las ventanas emergentes para exportar");return}
         w.document.write("<html><body style=\"padding:40px;font-family:Arial;color:#888\"><p>Generando reporte...</p></body></html>");
         var done=false;
-        var finish=function(md,g){if(done)return;done=true;try{exportPDF(account,data,alerts,range,md||[],g||{},w)}catch(e){w.document.open();w.document.write("<html><body><p>Error: "+e.message+"</p></body></html>");w.document.close()}};
+        var finish=function(md,g,aud){if(done)return;done=true;try{var d2=Object.assign({},data,{audience:aud||null});exportPDF(account,d2,alerts,range,md||[],g||{},w)}catch(e){w.document.open();w.document.write("<html><body><p>Error: "+e.message+"</p></body></html>");w.document.close()}};
         Promise.all([
           apiFetch("/api/account/"+account.id+"/monthly").catch(function(){return[]}),
-          apiFetch("/api/settings").catch(function(){return{}})
-        ]).then(function(r){finish(r[0],(r[1][account.id]||{}).monthlyGoals)}).catch(function(){finish([],{})});
-        setTimeout(function(){finish([],{})},10000);
+          apiFetch("/api/settings").catch(function(){return{}}),
+          apiFetch("/api/account/"+account.id+"/audience").catch(function(){return null})
+        ]).then(function(r){finish(r[0],(r[1][account.id]||{}).monthlyGoals,r[2])}).catch(function(){finish([],{},null)});
+        setTimeout(function(){finish([],{},null)},10000);
       },disabled:st!=="done",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.orange}`,background:D.orangeSoft,color:D.orange,cursor:"pointer",opacity:st!=="done"?.5:1}},icon("Download",14,D.orange),"Exportar PDF"),
       h("button",{onClick:function(){run(true)},disabled:st==="loading",style:{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 12px",fontSize:12.5,fontWeight:700,borderRadius:10,border:`1px solid ${D.line}`,background:D.card,color:D.text,cursor:"pointer",opacity:st==="loading"?.6:1}},st==="loading"?h("span",{className:"spin"},icon("Loader2",14)):icon("RefreshCw",14),st==="loading"?"Trayendo\u2026":"Actualizar"),
       h(ShareReportButton,{accountId:account.id})),
